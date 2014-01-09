@@ -5,7 +5,7 @@
   file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 -->
 
-hpx_lua
+hpx_script
 =========
 
-Lua bindings for HPX
+Bindings for HPX for various scripting languages, currently Lua.
