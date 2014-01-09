@@ -9,5 +9,5 @@ add_hpx_library(hpx_lua
   AUTOGLOB
   HEADER_GLOB "*.h*"
   SOURCE_GLOB "*.c*"
-  FOLDER "hpx_lua/src"
+  FOLDER "Lua/src"
   DEPENDENCIES ${LUA_LIBRARY} ${LUABIND_LIBRARY})
