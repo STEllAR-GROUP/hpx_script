@@ -14,8 +14,8 @@ if(PYTHONLIBS_FOUND)
   set(BOOST_LIBRARIES python)
   find_package(HPX_Boost)
 
-  if(PYTHONLIBS_FOUND)
-    include_directories(${PYTHON_INCLUDE_DIRS})
+  if(NOT (BOOST_PYTHON_LIBRARY STREQUAL BOOST_PYTHON_LIBRARY-NOTFOUND))
+    include_directories(${BOOST_INCLUDE_DIR})
     include_directories(${HPX_script_SOURCE_DIR}/python)
 
     # Add the module
@@ -23,7 +23,7 @@ if(PYTHONLIBS_FOUND)
       AUTOGLOB
       HEADER_GLOB "*.h*"
       SOURCE_GLOB "*.c*"
-      FOLDER "Lua/src"
+      FOLDER "Python/src"
       DEPENDENCIES ${PYTHON_LIBRARY} ${BOOST_PYTHON_LIBRARY})
 
   else()
