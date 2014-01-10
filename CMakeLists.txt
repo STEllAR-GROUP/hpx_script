@@ -22,7 +22,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 # Instruct cmake to find the HPX settings
 find_package(HPX)
 if(NOT HPX_FOUND)
-  hpx_error("hpx_debug" "Could not find HPX library")
+  hpx_error("hpx_script" "Could not find HPX library")
 endif()
 
 include_directories(${HPX_INCLUDE_DIR})

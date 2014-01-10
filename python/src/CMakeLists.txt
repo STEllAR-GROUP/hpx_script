@@ -27,10 +27,10 @@ if(PYTHONLIBS_FOUND)
       DEPENDENCIES ${PYTHON_LIBRARY} ${BOOST_PYTHON_LIBRARY})
 
   else()
-    message("Boost.Python not found, HPX Python bindings will not be available")
+    hpx_warning("hpx_script.python" "Boost.Python not found, HPX Python bindings will not be available")
   endif()
 
 else()
-  message("Python not found, please specify a correct PYTHON_ROOT to enable the Python bindings")
+  hpx_warning("hpx_script.python" "Python not found, please specify a correct PYTHON_ROOT to enable the Python bindings")
 endif()
 

@@ -26,10 +26,10 @@ if(LUA_FOUND)
       DEPENDENCIES ${LUA_LIBRARY} ${LUABIND_LIBRARY})
 
   else()
-    message("Luabind not found, HPX Lua bindings will not be available")
+    hpx_warning("hpx_script.lua" "Luabind not found, HPX Lua bindings will not be available")
   endif()
 
 else()
-  message("Lua not found, please specify a correct LUA_ROOT to enable the Lua bindings")
+  hpx_warning("hpx_script.lua" "Lua not found, please specify a correct LUA_ROOT to enable the Lua bindings")
 endif()
 
