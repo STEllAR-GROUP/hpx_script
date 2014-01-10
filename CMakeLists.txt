@@ -28,5 +28,18 @@ endif()
 include_directories(${HPX_INCLUDE_DIR})
 link_directories(${HPX_LIBRARY_DIR})
 
+# Adjust auxiliary build settings for HPX to work properly
+if(NOT MSVC)
+  set(HPX_RPATH ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}${HPX_RPATH})
+else()
+  # enable solution folders for MSVC
+  set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+  if(HPX_NO_INSTALL)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/$(Configuration)" CACHE PATH
+      "Prefix prepended to install directories." FORCE)
+  endif()
+endif()
+
 add_subdirectory(lua)
+add_subdirectory(python)
 

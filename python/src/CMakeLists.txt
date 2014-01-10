@@ -1,0 +1,36 @@
+# Copyright (c) 2014 Hartmut Kaiser
+#
+# Distributed under the Boost Software License, Version 1.0. (See accompanying
+# file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+# add hpx_python extension library
+
+# Required Python libraries
+find_package(PythonLibs)
+if(PYTHONLIBS_FOUND)
+  include_directories(${PYTHON_INCLUDE_DIRS})
+
+  # Make sure the Boost.Python Package is available
+  set(BOOST_LIBRARIES python)
+  find_package(HPX_Boost)
+
+  if(PYTHONLIBS_FOUND)
+    include_directories(${PYTHON_INCLUDE_DIRS})
+    include_directories(${HPX_script_SOURCE_DIR}/python)
+
+    # Add the module
+    add_hpx_library(hpx_python
+      AUTOGLOB
+      HEADER_GLOB "*.h*"
+      SOURCE_GLOB "*.c*"
+      FOLDER "Lua/src"
+      DEPENDENCIES ${PYTHON_LIBRARY} ${BOOST_PYTHON_LIBRARY})
+
+  else()
+    message("Boost.Python not found, HPX Python bindings will not be available")
+  endif()
+
+else()
+  message("Python not found, please specify a correct PYTHON_ROOT to enable the Python bindings")
+endif()
+
