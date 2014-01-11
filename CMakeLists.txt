@@ -12,7 +12,7 @@ endif()
 cmake_minimum_required(VERSION 2.8.4 FATAL_ERROR)
 
 # This project is C++ based.
-project(HPX_script)
+project(HPX_script CXX)
 
 # This adds the HPX cmake configuration directory to the search path.
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
@@ -30,7 +30,8 @@ link_directories(${HPX_LIBRARY_DIR})
 
 # Adjust auxiliary build settings for HPX to work properly
 if(NOT MSVC)
-  set(HPX_RPATH ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}${HPX_RPATH})
+  set(HPX_RPATH
+      "${HPX_RPATH}:${CMAKE_INSTALL_PREFIX}/lib/hpx:${CMAKE_BINARY_DIR}/lib/hpx")
 else()
   # enable solution folders for MSVC
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
