@@ -41,8 +41,13 @@ int main() {
     "hpx_reg('pr','do_stuff') "
     );
 
+  // Call a function. First, get the function onto the stack
   lua_getglobal(lenv,"do_stuff");
+
+  // Now push an argument onto the stack
   lua_pushnumber(lenv,666);
+
+  // Now call pcall
   int nargs = 1;
   int results = 2;
   int errfunc = 0;
@@ -55,7 +60,7 @@ int main() {
   // extract return values if any...
   } else {
     int n = lua_gettop(lenv);
-    for(int i=0;i<n;i++) {
+    for(int i=1;i<=n;i++) {
       if(lua_isnumber(lenv,i)) {
         std::cout << "lua[" << i << "]=" << lua_tonumber(lenv,i) << std::endl;
       } else if(lua_isstring(lenv,i)) {
