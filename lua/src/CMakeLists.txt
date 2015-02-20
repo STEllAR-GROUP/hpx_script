@@ -3,33 +3,41 @@
 # Distributed under the Boost Software License, Version 1.0. (See accompanying
 # file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-# add hpx_lua extension library
+cmake_minimum_required(VERSION 2.8.4 FATAL_ERROR)
 
-# Required Lua libraries
-find_package(HPX_lua)
-if(LUA_FOUND)
-  include_directories(${LUA_INCLUDE_DIR})
-  link_directories(${LUA_LIBRARY_DIR})
+project(xlua CXX)
 
-  find_package(HPX_luabind)
-  if(LUABIND_FOUND)
-    include_directories(${LUABIND_INCLUDE_DIR})
-    include_directories(${HPX_script_SOURCE_DIR}/lua)
-
-    link_directories(${LUABIND_LIBRARY_DIR})
-
-    add_hpx_library(hpx_lua
-      AUTOGLOB
-      HEADER_GLOB "*.h*"
-      SOURCE_GLOB "*.c*"
-      FOLDER "Lua/src"
-      DEPENDENCIES ${LUA_LIBRARY} ${LUABIND_LIBRARY})
-
-  else()
-    hpx_warning("hpx_script.lua" "Luabind not found, HPX Lua bindings will not be available")
-  endif()
-
-else()
-  hpx_warning("hpx_script.lua" "Lua not found, please specify a correct LUA_ROOT to enable the Lua bindings")
+if(NOT HPX_ROOT)
+  message(FATAL "HPX_ROOT not set, unable to find HPX!")
 endif()
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+  ${HPX_ROOT}/share/cmake-${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}/Modules)
+
+find_package(HPX)
+if(HPX_FOUND)
+  include_directories(${HPX_INCLUDE_DIRS})
+  link_directories(${HPX_LIB_DIRS})
+
+  include_directories(${LUA_DIR}/src)
+  link_directories(${LUA_DIR}/src)
+
+  add_definitions(-DLUA_USE_READLINE)
+
+  include_directories(.)
+
+  add_library(xlua xlua.cpp)
+
+  add_hpx_executable(xlua
+    ESSENTIAL
+    SOURCES lua.cpp)
+
+  add_hpx_executable(hello
+    ESSENTIAL
+    SOURCES examples/hello.cpp)
+
+  target_link_libraries(xlua_exe xlua lua readline)
+  target_link_libraries(hello_exe xlua lua)
+else()
+  message("Could not find HPX.")
+endif()
