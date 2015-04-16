@@ -273,19 +273,8 @@ public:
   lua_State *get_state() {
     return L;
   }
-  LuaEnv() {
-    ptr = get_lua_ptr();
-    if(ptr->busy) {
-      std::cout << "Busy" << std::endl;
-      abort();
-    }
-    ptr->busy = true;
-    L = ptr->get_state();
-  }
-  ~LuaEnv() {
-    ptr->busy = false;
-    set_lua_ptr(ptr);
-  }
+  LuaEnv();
+  ~LuaEnv();
   operator lua_State *() {
     return L;
   }

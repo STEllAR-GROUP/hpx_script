@@ -65,7 +65,7 @@ extern "C" {
 */
 
 #include <hpx/hpx_main.hpp>
-#include <xlua.hpp>
+#include <xlua_trimmed.hpp>
 
 #if defined(LUA_USE_READLINE)
 
@@ -485,7 +485,11 @@ static int pmain (lua_State *L) {
 
 }
 
+#include <time.h>
+
 int main (int argc, char **argv) {
+  clock_t ts,te;
+  ts = clock();
   int status, result;
   hpx::LuaEnv lenv;
   lua_State *L = lenv;  /* create state */
@@ -501,5 +505,7 @@ int main (int argc, char **argv) {
   result = lua_toboolean(L, -1);  /* get result */
   finalreport(L, status);
   //lua_close(L);
+  te = clock();
+  printf("Execution time=%.2f secs\n",((double)(te-ts))/CLOCKS_PER_SEC);
   return (result && status == LUA_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

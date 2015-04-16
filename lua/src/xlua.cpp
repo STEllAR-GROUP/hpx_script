@@ -2,6 +2,20 @@
 
 namespace hpx {
 
+LuaEnv::LuaEnv() {
+  ptr = get_lua_ptr();
+  if(ptr->busy) {
+    std::cout << "Busy" << std::endl;
+    abort();
+  }
+  ptr->busy = true;
+  L = ptr->get_state();
+}
+LuaEnv::~LuaEnv() {
+  ptr->busy = false;
+  set_lua_ptr(ptr);
+}
+
 const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
 const char *locality_metatable_name = "hpx_locality";
