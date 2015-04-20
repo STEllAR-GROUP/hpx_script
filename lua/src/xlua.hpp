@@ -205,7 +205,6 @@ public:
 
 class Lua;
 
-extern std::atomic<bool> reg_complete;
 extern std::map<std::string,std::string> function_registry;
 
 //--- A wrapper for the Lua object. Allows us to add state.
@@ -226,7 +225,7 @@ private:
     lua_pushcfunction(L,isfuture);
     lua_setglobal(L,"isfuture");
     lua_pushcfunction(L,hpx_reg);
-    lua_setglobal(L,"hpx_reg");
+    lua_setglobal(L,"HPX_PLAIN_ACTION");
     lua_pushcfunction(L,hpx_run);
     lua_setglobal(L,"hpx_run");
     lua_pushcfunction(L,luax_run_guarded);
@@ -238,15 +237,13 @@ private:
     open_locality(L);
     luaL_requiref(L, "locality",&open_locality, 1);
     lua_pop(L,lua_gettop(L));
-    if(reg_complete) {
-      for(auto i=function_registry.begin();i != function_registry.end();++i) {
-        // Insert into table
-        if(lua_load(L,(lua_Reader)lua_read,(void *)&i->second,i->first.c_str(),"b") != 0) {
-          std::cout << "function " << i->first << " size=" << i->second.size() << std::endl;
-          SHOW_ERROR(L);
-        } else {
-          lua_setglobal(L,i->first.c_str());
-        }
+    for(auto i=function_registry.begin();i != function_registry.end();++i) {
+      // Insert into table
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&i->second,i->first.c_str(),"b") != 0) {
+        std::cout << "function " << i->first << " size=" << i->second.size() << std::endl;
+        SHOW_ERROR(L);
+      } else {
+        lua_setglobal(L,i->first.c_str());
       }
     }
     busy = false;

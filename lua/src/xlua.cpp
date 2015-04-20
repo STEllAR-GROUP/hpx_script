@@ -1,4 +1,5 @@
 #include "xlua.hpp"
+#include <hpx/lcos/broadcast.hpp>
 
 namespace hpx {
 
@@ -103,7 +104,6 @@ std::ostream& show_stack(std::ostream& o,lua_State *L,int line,bool recurse) {
 }
 
 //--- Synchronization for the function registry process
-std::atomic<bool> reg_complete(false);
 std::map<std::string,std::string> function_registry;
 
 #include <hpx/util/thread_specific_ptr.hpp>
@@ -258,11 +258,33 @@ int find_here(lua_State *L) {
   return 1;
 }
 
+int root_locality(lua_State *L) {
+  new_locality(L);
+  locality_type *loc = (locality_type*)lua_touserdata(L,-1);
+  *loc = hpx::find_root_locality();
+  return 1;
+}
+
 int all_localities(lua_State *L) {
   std::vector<hpx::naming::id_type> all_localities = hpx::find_all_localities();
   lua_createtable(L,all_localities.size(),0); 
   int n = 1;
   for(auto i = all_localities.begin();i != all_localities.end();++i) {
+    lua_pushnumber(L,n);
+    new_locality(L);
+    locality_type *loc = (locality_type*)lua_touserdata(L,-1);
+    *loc = *i;
+    lua_settable(L,-3);
+    n++;
+  }
+  return 1;
+}
+
+int remote_localities(lua_State *L) {
+  std::vector<hpx::naming::id_type> remote_localities = hpx::find_all_localities();
+  lua_createtable(L,remote_localities.size(),0); 
+  int n = 1;
+  for(auto i = remote_localities.begin();i != remote_localities.end();++i) {
     lua_pushnumber(L,n);
     new_locality(L);
     locality_type *loc = (locality_type*)lua_touserdata(L,-1);
@@ -308,7 +330,9 @@ int open_locality(lua_State *L) {
     static const struct luaL_Reg locality_funcs [] = {
         {"new", &new_locality},
         {"find_here", &find_here},
-        {"all_localities", &all_localities},
+        {"find_all_localities", &all_localities},
+        {"find_root_locality", &root_locality},
+        {"find_remote_localities", &remote_localities},
         {NULL, NULL}
     };
 
@@ -459,10 +483,6 @@ ptr_type luax_dataflow2(
     }
 
     if(!found) {
-      if(!reg_complete) {
-        std::cout << "ERROR: Registration not complete" << std::endl;
-        abort();
-      }
       if(function_registry.find(*fname) == function_registry.end()) {
         std::cout << "Function '" << *fname << "' is not defined." << std::endl;
         return answers;
@@ -545,10 +565,6 @@ ptr_type luax_async2(
     }
 
     if(!found) {
-      if(!reg_complete) {
-        std::cout << "ERROR: Registration not complete" << std::endl;
-        abort();
-      }
       if(function_registry.find(*fname) == function_registry.end()) {
         std::cout << "Function '" << *fname << "' is not defined." << std::endl;
         return answers;
@@ -623,6 +639,8 @@ int remote_reg(std::map<std::string,std::string> registry);
 HPX_PLAIN_ACTION(hpx::luax_dataflow,luax_dataflow_action);
 HPX_PLAIN_ACTION(hpx::luax_async2,luax_async_action);
 HPX_PLAIN_ACTION(hpx::remote_reg,remote_reg_action);
+HPX_REGISTER_BROADCAST_ACTION_DECLARATION(remote_reg_action);
+HPX_REGISTER_BROADCAST_ACTION(remote_reg_action);
 
 namespace hpx {
 
@@ -771,7 +789,6 @@ int remote_reg(std::map<std::string,std::string> registry) {
 
 		lua_setglobal(L,i->first.c_str());
 	}
-	reg_complete = true;
 	return 0;
 }
 
@@ -782,10 +799,6 @@ int remote_reg(std::map<std::string,std::string> registry) {
 // The first is a script, the second a lib (named either power.so or libpower.so),
 // the third a function. 
 int hpx_reg(lua_State *L) {
-	if(reg_complete) {
-		std::cout << "ERROR: Multiple registrations" << std::endl;
-		exit(1);
-	}
 	while(lua_gettop(L)>0) {
 		if(lua_isstring(L,-1)) {
 			const int n = lua_gettop(L);
@@ -807,17 +820,13 @@ int hpx_reg(lua_State *L) {
 		}
 		lua_pop(L,1);
 	}
-	hpx::naming::id_type here = hpx::find_here();
-	std::vector<hpx::naming::id_type> all_localities = hpx::find_all_localities();
-	std::vector<hpx::shared_future<int> > registries;
-	for(auto i = all_localities.begin();i != all_localities.end();++i) {
-		if(here == *i)
-			continue;
-		hpx::shared_future<int> reg = hpx::async<remote_reg_action>(*i,function_registry);
-		registries.push_back(reg);
-	}
-	hpx::wait_all(registries);
-	reg_complete = true;
+
+	std::vector<hpx::naming::id_type> remote_localities = hpx::find_remote_localities();
+  if(remote_localities.size() > 0) {
+    auto f = hpx::lcos::broadcast<remote_reg_action>(remote_localities,function_registry);
+    f.get(); // in case there are exceptions
+  }
+  
 	return 1;
 }
 

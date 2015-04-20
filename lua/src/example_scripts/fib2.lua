@@ -14,8 +14,7 @@ function fib(n)
   if (n > 21) then
     n1 = dataflow('fib',n-1)
     n2 = fib(n-2)
-    --use unwrap with fadd instead of :get()
-    --if possible
+    --use another dataflow to get rid of get
     return dataflow('fadd',n1,n2)
   else
     -- avoid any hpx calls if possible
@@ -26,7 +25,7 @@ function fib(n)
 end
 
 ------------------------------
-hpx_reg('fadd','fib','fibs')
+HPX_PLAIN_ACTION('fadd','fib','fibs')
 
 f1 = fib(30)
 print(f1:get())

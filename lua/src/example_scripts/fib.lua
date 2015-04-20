@@ -13,7 +13,7 @@ end
 ------------------------------
 --Need to register functions to
 --run them through hpx
-hpx_reg('fadd','fib')
+HPX_PLAIN_ACTION('fadd','fib')
 
 --Like async(), but tries to
 --not create a new thread. Needed
