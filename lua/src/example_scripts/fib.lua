@@ -18,5 +18,5 @@ hpx_reg('fadd','fib')
 --Like async(), but tries to
 --not create a new thread. Needed
 --if the argument is a futrue.
-f1 = unwrap('fib',20)
-unwrap('print',f1)
+f1 = fib(20)
+dataflow('print',f1)

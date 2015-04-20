@@ -57,6 +57,7 @@ inline std::ostream& operator<<(std::ostream& o,const string_wrap& sw) {
   return o << sw.str;
 }
 
+int dataflow(lua_State *L);
 int async(lua_State *L);
 int unwrap(lua_State *L);
 
@@ -86,8 +87,8 @@ typedef hpx::naming::id_type locality_type;
 
 class Holder;
 
-typedef hpx::shared_future<boost::shared_ptr<std::vector<Holder> > > future_type;
 typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
+typedef hpx::shared_future<ptr_type> future_type;
 typedef std::map<std::string,Holder> table_type;
 
 struct Guard {
@@ -216,6 +217,8 @@ private:
   public:
   Lua() : busy(true), L(luaL_newstate()) {
     luaL_openlibs(L);
+    lua_pushcfunction(L,dataflow);
+    lua_setglobal(L,"dataflow");
     lua_pushcfunction(L,async);
     lua_setglobal(L,"async");
     lua_pushcfunction(L,unwrap);

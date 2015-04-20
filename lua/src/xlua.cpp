@@ -438,8 +438,8 @@ future_type realize_when_all_outputs(ptr_type args) {
   return result.then(hpx::util::unwrapped(boost::bind(realize_when_all_outputs_step2,args,_1)));
 }
 
-//--- Handle async calling from Lua
-ptr_type luax_async2(
+//--- Handle dataflow calling from Lua
+ptr_type luax_dataflow2(
     string_ptr fname,
     ptr_type args,
     boost::shared_ptr<std::vector<ptr_type> > futs) {
@@ -482,7 +482,7 @@ ptr_type luax_async2(
     if(n > 0)
       lua_pop(L,n);
 
-    // Push data from the concreate values and ready futures onto the Lua stack
+    // Push data from the concrete values and ready futures onto the Lua stack
     auto f = futs->begin();
     for(auto i=args->begin();i!=args->end();++i) {
       int w = i->var.which();
@@ -526,14 +526,92 @@ ptr_type luax_async2(
   return answers;
 }
 
-//--- Realize futures in inputs, call async function, realize futures in outputs
-future_type luax_async(
+//--- Handle dataflow calling from Lua
+ptr_type luax_async2(
+    string_ptr fname,
+    ptr_type args) {
+  ptr_type answers(new std::vector<Holder>());
+
+  {
+    LuaEnv lenv;
+
+    lua_State *L = lenv.get_state();
+
+    bool found = false;
+
+    lua_getglobal(L,fname->c_str());
+    if(lua_isfunction(L,-1)) {
+      found = true;
+    }
+
+    if(!found) {
+      if(!reg_complete) {
+        std::cout << "ERROR: Registration not complete" << std::endl;
+        abort();
+      }
+      if(function_registry.find(*fname) == function_registry.end()) {
+        std::cout << "Function '" << *fname << "' is not defined." << std::endl;
+        return answers;
+      }
+
+      std::string bytecode = function_registry[*fname];
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,fname->c_str(),"b") != 0) {
+        std::cout << "Error in function: '" << *fname << "' size=" << bytecode.size() << std::endl;
+        SHOW_ERROR(L);
+        return answers;
+      }
+
+      lua_setglobal(L,fname->c_str());
+    }
+
+    int n = lua_gettop(L);
+    if(n > 0)
+      lua_pop(L,n);
+
+    // Push data from the concrete values and ready futures onto the Lua stack
+    for(auto i=args->begin();i!=args->end();++i) {
+      i->unpack(L);
+    }
+
+    lua_getglobal(L,fname->c_str());
+    lua_insert(L,1);
+
+    //std::ostringstream msg;
+    //show_stack(msg,L,__LINE__);
+    // Provide a maximum number output args
+    const int max_output_args = 10;
+    if(lua_pcall(L,args->size(),max_output_args,0) != 0) {
+      //std::cout << msg.str();
+      SHOW_ERROR(L);
+      return answers;
+    }
+
+    // Trim stack
+    int nargs = lua_gettop(L);
+    while(nargs > 0 && lua_isnil(L,-1)) {
+      lua_pop(L,1);
+      nargs--;
+    }
+
+    for(int i=1;i<=nargs;i++) {
+      Holder h;
+      h.pack(L,i);
+      h.push(answers);
+    }
+    lua_pop(L,nargs);
+  }
+
+  return answers;
+}
+
+//--- Realize futures in inputs, call dataflow function, realize futures in outputs
+future_type luax_dataflow(
     string_ptr fname,
     ptr_type args) {
     // wait for all futures in input
     hpx::future<boost::shared_ptr<std::vector<ptr_type> > > f1 = realize_when_all_inputs(args);
     // pass values of all futures along with args
-    future_type f2 = f1.then(hpx::util::unwrapped(boost::bind(luax_async2,fname,args,_1)));
+    future_type f2 = f1.then(hpx::util::unwrapped(boost::bind(luax_dataflow2,fname,args,_1)));
     // clean all futures out of returns
     return f2.then(hpx::util::unwrapped(boost::bind(realize_when_all_outputs,_1)));
 }
@@ -542,7 +620,8 @@ int remote_reg(std::map<std::string,std::string> registry);
 
 }
 
-HPX_PLAIN_ACTION(hpx::luax_async,luax_async_action);
+HPX_PLAIN_ACTION(hpx::luax_dataflow,luax_dataflow_action);
+HPX_PLAIN_ACTION(hpx::luax_async2,luax_async_action);
 HPX_PLAIN_ACTION(hpx::remote_reg,remote_reg_action);
 
 namespace hpx {
@@ -591,6 +670,38 @@ int isfuture(lua_State *L) {
     return 1;
 }
 
+int dataflow(lua_State *L) {
+
+    locality_type *loc = nullptr;
+    if(lua_isuserdata(L,1) && luaL_checkudata(L,1,locality_metatable_name) != nullptr) {
+      loc = (locality_type *)lua_touserdata(L,1);
+      lua_remove(L,1);
+    }
+
+    // Package up the arguments
+    ptr_type args(new std::vector<Holder>());
+    int nargs = lua_gettop(L);
+    for(int i=2;i<=nargs;i++) {
+      Holder h;
+      h.pack(L,i);
+      h.push(args);
+    }
+    
+    string_ptr fname(new string_wrap(lua_tostring(L,1)));
+
+    // Launch the thread
+    future_type f =
+      (loc == nullptr) ?
+        hpx::async(luax_dataflow,fname,args) :
+        hpx::async<luax_dataflow_action>(*loc,fname,args);
+
+    new_future(L);
+    future_type *fc =
+      (future_type *)lua_touserdata(L,-1);
+    *fc = f;
+    return 1;
+}
+
 int async(lua_State *L) {
 
     locality_type *loc = nullptr;
@@ -613,7 +724,7 @@ int async(lua_State *L) {
     // Launch the thread
     future_type f =
       (loc == nullptr) ?
-        hpx::async(luax_async,fname,args) :
+        hpx::async(luax_async2,fname,args) :
         hpx::async<luax_async_action>(*loc,fname,args);
 
     new_future(L);
@@ -637,7 +748,7 @@ int unwrap(lua_State *L) {
     string_ptr fname(new string_wrap(lua_tostring(L,1)));
 
     future_type f =
-      luax_async(fname,args);
+      luax_dataflow(fname,args);
 
     new_future(L);
     future_type *fc =

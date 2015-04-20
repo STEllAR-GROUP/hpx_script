@@ -12,11 +12,11 @@ function fib(n)
   local n1
   local n2
   if (n > 21) then
-    n1 = async('fib',n-1)
+    n1 = dataflow('fib',n-1)
     n2 = fib(n-2)
     --use unwrap with fadd instead of :get()
     --if possible
-    return unwrap('fadd',n1,n2)
+    return dataflow('fadd',n1,n2)
   else
     -- avoid any hpx calls if possible
     n1 = fibs(n-1)
@@ -28,5 +28,5 @@ end
 ------------------------------
 hpx_reg('fadd','fib','fibs')
 
-f1 = unwrap('fib',30)
+f1 = fib(30)
 print(f1:get())

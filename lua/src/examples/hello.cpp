@@ -32,7 +32,7 @@ int main() {
     "  all = locality.all_localities() "
     "  for k,v in ipairs(all) do "
     "    print('k=',k,'v=',''..v) "
-    "    async(v,'pr',k)"
+    "    dataflow(v,'pr',k)"
     "  end "
     "  return a+1,'done' "
     "end "

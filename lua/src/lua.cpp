@@ -485,11 +485,11 @@ static int pmain (lua_State *L) {
 
 }
 
-#include <time.h>
+#include <ctime>
+#include <chrono>
 
 int main (int argc, char **argv) {
-  clock_t ts,te;
-  ts = clock();
+  auto ts = std::chrono::high_resolution_clock::now();
   int status, result;
   hpx::LuaEnv lenv;
   lua_State *L = lenv;  /* create state */
@@ -505,7 +505,7 @@ int main (int argc, char **argv) {
   result = lua_toboolean(L, -1);  /* get result */
   finalreport(L, status);
   //lua_close(L);
-  te = clock();
-  printf("Execution time=%.2f secs\n",((double)(te-ts))/CLOCKS_PER_SEC);
+  auto te = std::chrono::high_resolution_clock::now();
+  printf("Execution time=%.2f secs\n",std::chrono::duration<double,std::milli>(te-ts).count()*1e-3);
   return (result && status == LUA_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
