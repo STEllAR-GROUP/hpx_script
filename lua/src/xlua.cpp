@@ -197,6 +197,14 @@ int luax_wait_all(lua_State *L) {
   return 1;
 }
 
+ptr_type get_when_any_result(hpx::when_any_result< std::vector< future_type > > result) {
+  ptr_type p{new std::vector<Holder>()};
+  Holder h;
+  h.var = result.index;
+  p->push_back(h);
+  return p;
+}
+
 int luax_when_any(lua_State *L) {
   int nargs = lua_gettop(L);
   std::vector<future_type> v;
@@ -211,7 +219,8 @@ int luax_when_any(lua_State *L) {
   future_type *fc =
     (future_type *)lua_touserdata(L,-1);
 
-  auto result = hpx::when_any(v);
+  hpx::future< hpx::when_any_result< std::vector< future_type > > > result = hpx::when_any(v);
+  *fc = result.then(hpx::util::unwrapped(boost::bind(get_when_any_result,_1)));
 
   return 1;
 }
