@@ -87,12 +87,13 @@ extern const char *guard_metatable_name;
 extern const char *locality_metatable_name;
 
 typedef hpx::naming::id_type locality_type;
-
+ 
 class Holder;
 
 typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
-typedef std::map<std::string,Holder> table_type;
+typedef boost::variant<double,std::string> key_type;
+typedef std::map<key_type,Holder> table_type;
 typedef std::vector<Holder> array_type;
 
 struct Guard {
@@ -167,8 +168,15 @@ public:
       table_type& table = boost::get<table_type>(var);
       lua_createtable(L,0,table.size());
       for(auto i=table.begin();i != table.end();++i) {
+        int which = i->first.which();
         i->second.unpack(L);
-        lua_setfield(L,-2,i->first.c_str());
+        if(which == 0) {
+          lua_pushnumber(L,(int)boost::get<double>(i->first));
+          lua_settable(L,-3);
+        } else {
+          std::string str = boost::get<std::string>(i->first);
+          lua_setfield(L,-2,str.c_str());
+        }
       }
     } else {
       std::cout << "ERROR: Unknown type: " << var.which() << std::endl;
@@ -194,7 +202,17 @@ public:
       while(lua_next(L,-2) != 0) {
         lua_pushvalue(L,-2);
         if(lua_isstring(L,-1)) {
-          std::string key = lua_tostring(L,-1);
+          const char *keys = lua_tostring(L,-1);
+          if(keys == nullptr)
+            continue;
+          std::string key{keys};
+          Holder h;
+          h.pack(L,-2);
+          if(h.var.which() != empty_t) {
+            table[key] = h;
+          }
+        } else if(lua_isnumber(L,-1)) {
+          double key = lua_tonumber(L,-1);
           Holder h;
           h.pack(L,-2);
           if(h.var.which() != empty_t) {

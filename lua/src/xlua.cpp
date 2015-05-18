@@ -1,6 +1,12 @@
 #include "xlua.hpp"
 #include <hpx/lcos/broadcast.hpp>
 
+#define CHECK_STRING(INDEX,NAME) \
+  if(!lua_isstring(L,INDEX)) { \
+    luai_writestringerror("Argument to '%s' is not a string ",NAME);\
+    return 0; \
+  }
+
 namespace hpx {
 
 LuaEnv::LuaEnv() {
@@ -209,8 +215,27 @@ int luax_when_any(lua_State *L) {
   int nargs = lua_gettop(L);
   std::vector<future_type> v;
   for(int i=1;i<=nargs;i++) {
-    if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
-      future_type *fnc = (future_type *)lua_touserdata(L,1);
+    if(lua_istable(L,i) && nargs==1) {
+      int top = lua_gettop(L);
+      lua_pushvalue(L,i);
+      lua_pushnil(L);
+      int n = 0;
+      while(lua_next(L,-2)) {
+        lua_pushvalue(L,-2);
+        n++;
+        const int ix = -2;
+        if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
+          luai_writestringerror("Argument %d to when_any() is not a future ",n);
+          return 0;
+        }
+        future_type *fnc = (future_type *)lua_touserdata(L,ix);
+        v.push_back(*fnc);
+        lua_pop(L,2);
+      }
+      if(lua_gettop(L) > top)
+        lua_pop(L,lua_gettop(L)-top);
+    } else if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+      future_type *fnc = (future_type *)lua_touserdata(L,i);
       v.push_back(*fnc);
     }
   }
@@ -229,6 +254,7 @@ int hpx_future_then(lua_State *L) {
   if(luaL_checkudata(L,1,future_metatable_name) != nullptr) {
     future_type *fnc = (future_type *)lua_touserdata(L,1);
     
+    CHECK_STRING(2,"Future:Then()")
     string_ptr fname(new string_wrap(lua_tostring(L,2)));
 
     // Package up the arguments
@@ -721,6 +747,7 @@ namespace hpx {
 
 int luax_run_guarded(lua_State *L) {
   int n = lua_gettop(L);
+  CHECK_STRING(-1,"run_guarded")
   string_ptr fname(new string_wrap(lua_tostring(L,-1)));
   guard_type g;
   if(n == 1) {
@@ -780,6 +807,7 @@ int dataflow(lua_State *L) {
       h.push(args);
     }
     
+    CHECK_STRING(1,"dataflow")
     string_ptr fname(new string_wrap(lua_tostring(L,1)));
 
     // Launch the thread
@@ -812,6 +840,7 @@ int async(lua_State *L) {
       h.push(args);
     }
     
+    CHECK_STRING(1,"async")
     string_ptr fname(new string_wrap(lua_tostring(L,1)));
 
     // Launch the thread
@@ -838,6 +867,7 @@ int unwrap(lua_State *L) {
       h.push(args);
     }
     
+    CHECK_STRING(1,"unwrap")
     string_ptr fname(new string_wrap(lua_tostring(L,1)));
 
     future_type f =
@@ -875,6 +905,7 @@ int remote_reg(std::map<std::string,std::string> registry) {
 // the third a function. 
 int hpx_reg(lua_State *L) {
 	while(lua_gettop(L)>0) {
+    CHECK_STRING(-1,"HPX_PLAIN_ACTION")
 		if(lua_isstring(L,-1)) {
 			const int n = lua_gettop(L);
 			std::string fname = lua_tostring(L,-1);
@@ -939,6 +970,7 @@ void hpx_srun(string_ptr fname,ptr_type gdata,guard_type *gv,int ng) {
 }
 
 int hpx_run(lua_State *L) {
+  CHECK_STRING(1,"hpx_run")
   std::string fname = lua_tostring(L,1);
   lua_remove(L,1);
   return hpx_srun(L,fname,global_guarded->g_data);
