@@ -205,8 +205,17 @@ int luax_wait_all(lua_State *L) {
 
 ptr_type get_when_any_result(hpx::when_any_result< std::vector< future_type > > result) {
   ptr_type p{new std::vector<Holder>()};
+  //Holder h;
+  //h.var = result.index;
+  //p->push_back(h);
+  table_type t;
+  t["index"].var = result.index+1;
+  table_type t2;
+  for(int i=0;i<result.futures.size();i++)
+    t2[i+1].var = result.futures[i];
+  t["futures"].var = t2;
   Holder h;
-  h.var = result.index;
+  h.var = t;
   p->push_back(h);
   return p;
 }

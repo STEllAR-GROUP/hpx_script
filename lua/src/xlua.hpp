@@ -162,8 +162,11 @@ public:
         i->unpack(L);
     } else if(var.which() == fut_t) {
       // Shouldn't ever happen
-      std::cout << "ERROR: Unrealized future in arg list" << std::endl;
-      abort();
+      //std::cout << "ERROR: Unrealized future in arg list" << std::endl;
+      //abort();
+      new_future(L);
+      future_type *fc = (future_type *)lua_touserdata(L,-1);
+      *fc = boost::get<future_type>(var);
     } else if(var.which() == table_t) {
       table_type& table = boost::get<table_type>(var);
       lua_createtable(L,0,table.size());
