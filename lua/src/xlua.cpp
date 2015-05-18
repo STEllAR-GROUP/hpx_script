@@ -188,8 +188,27 @@ int luax_wait_all(lua_State *L) {
   int nargs = lua_gettop(L);
   std::vector<future_type> v;
   for(int i=1;i<=nargs;i++) {
-    if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
-      future_type *fnc = (future_type *)lua_touserdata(L,1);
+    if(lua_istable(L,i) && nargs==1) {
+      int top = lua_gettop(L);
+      lua_pushvalue(L,i);
+      lua_pushnil(L);
+      int n = 0;
+      while(lua_next(L,-2)) {
+        lua_pushvalue(L,-2);
+        n++;
+        const int ix = -2;
+        if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
+          luai_writestringerror("Argument %d to when_any() is not a future ",n);
+          return 0;
+        }
+        future_type *fnc = (future_type *)lua_touserdata(L,ix);
+        v.push_back(*fnc);
+        lua_pop(L,2);
+      }
+      if(lua_gettop(L) > top)
+        lua_pop(L,lua_gettop(L)-top);
+    } else if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+      future_type *fnc = (future_type *)lua_touserdata(L,i);
       v.push_back(*fnc);
     }
   }
