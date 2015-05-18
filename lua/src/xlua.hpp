@@ -16,9 +16,10 @@
 #include <hpx/lcos/future.hpp>
 #include <hpx/lcos/local/composable_guard.hpp>
 #include <hpx/include/actions.hpp>
-#include <boost/serialization/map.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/variant.hpp>
+#include <hpx/runtime/serialization/shared_ptr.hpp>
+#include <hpx/runtime/serialization/map.hpp>
+#include <hpx/runtime/serialization/vector.hpp>
+#include <hpx/runtime/serialization/variant.hpp>
 
 #define SHOW_ERROR(L) do { std::cout \
     << "Error: " << __FILE__ << ":" << __LINE__ << " " \
@@ -46,7 +47,7 @@ struct string_wrap {
   string_wrap(const char *s) : str(s) {}
   ~string_wrap() {}
 private:
-    friend class boost::serialization::access;
+    friend class hpx::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version)
     {
@@ -59,6 +60,8 @@ inline std::ostream& operator<<(std::ostream& o,const string_wrap& sw) {
 
 int dataflow(lua_State *L);
 int async(lua_State *L);
+int luax_wait_all(lua_State *L);
+int luax_when_any(lua_State *L);
 int unwrap(lua_State *L);
 
 int hpx_reg(lua_State *L);
@@ -90,6 +93,7 @@ class Holder;
 typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
 typedef std::map<std::string,Holder> table_type;
+typedef std::vector<Holder> array_type;
 
 struct Guard {
   boost::shared_ptr<hpx::lcos::local::guard> g;
@@ -108,7 +112,7 @@ extern guard_type global_guarded;
 
 struct Empty {
 private:
-    friend class boost::serialization::access;
+    friend class hpx::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version)
     {
@@ -118,7 +122,7 @@ private:
 //--- Generic holder for a Lua data object
 class Holder {
 private:
-    friend class boost::serialization::access;
+    friend class hpx::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version)
     {
@@ -189,11 +193,13 @@ public:
       table_type& table = boost::get<table_type>(var);
       while(lua_next(L,-2) != 0) {
         lua_pushvalue(L,-2);
-        std::string key = lua_tostring(L,-1);
-        Holder h;
-        h.pack(L,-2);
-        if(h.var.which() != empty_t) {
-          table[key] = h;
+        if(lua_isstring(L,-1)) {
+          std::string key = lua_tostring(L,-1);
+          Holder h;
+          h.pack(L,-2);
+          if(h.var.which() != empty_t) {
+            table[key] = h;
+          }
         }
         lua_pop(L,2);
       }
@@ -220,6 +226,10 @@ private:
     lua_setglobal(L,"dataflow");
     lua_pushcfunction(L,async);
     lua_setglobal(L,"async");
+    lua_pushcfunction(L,luax_wait_all);
+    lua_setglobal(L,"wait_all");
+    lua_pushcfunction(L,luax_when_any);
+    lua_setglobal(L,"when_any");
     lua_pushcfunction(L,unwrap);
     lua_setglobal(L,"unwrap");
     lua_pushcfunction(L,isfuture);

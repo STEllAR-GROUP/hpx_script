@@ -174,9 +174,75 @@ int hpx_future_get(lua_State *L) {
   return 1;
 }
 
+ptr_type luax_async2(
+    string_ptr fname,
+    ptr_type args);
+
+int luax_wait_all(lua_State *L) {
+  int nargs = lua_gettop(L);
+  std::vector<future_type> v;
+  for(int i=1;i<=nargs;i++) {
+    if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+      future_type *fnc = (future_type *)lua_touserdata(L,1);
+      v.push_back(*fnc);
+    }
+  }
+
+  new_future(L);
+  future_type *fc =
+    (future_type *)lua_touserdata(L,-1);
+
+  hpx::wait_all(v);
+
+  return 1;
+}
+
+int luax_when_any(lua_State *L) {
+  int nargs = lua_gettop(L);
+  std::vector<future_type> v;
+  for(int i=1;i<=nargs;i++) {
+    if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+      future_type *fnc = (future_type *)lua_touserdata(L,1);
+      v.push_back(*fnc);
+    }
+  }
+
+  new_future(L);
+  future_type *fc =
+    (future_type *)lua_touserdata(L,-1);
+
+  auto result = hpx::when_any(v);
+
+  return 1;
+}
+
+int hpx_future_then(lua_State *L) {
+  if(luaL_checkudata(L,1,future_metatable_name) != nullptr) {
+    future_type *fnc = (future_type *)lua_touserdata(L,1);
+    
+    string_ptr fname(new string_wrap(lua_tostring(L,2)));
+
+    // Package up the arguments
+    ptr_type args(new std::vector<Holder>());
+    int nargs = lua_gettop(L);
+    for(int i=3;i<=nargs;i++) {
+      Holder h;
+      h.pack(L,i);
+      h.push(args);
+    }
+
+    new_future(L);
+    future_type *fc =
+      (future_type *)lua_touserdata(L,-1);
+    *fc = fnc->then(boost::bind(luax_async2,fname,args));
+  }
+  return 1;
+}
+
 int open_future(lua_State *L) {
     static const struct luaL_Reg future_meta_funcs [] = {
-        {"get",&hpx_future_get},
+        {"Get",&hpx_future_get},
+        {"Then",&hpx_future_then},
         {NULL,NULL},
     };
 

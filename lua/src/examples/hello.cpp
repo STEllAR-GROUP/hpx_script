@@ -29,7 +29,7 @@ int main() {
     "  print('hello from '..here..' value = '..arg)"
     "end "
     "function do_stuff(a) "
-    "  all = locality.all_localities() "
+    "  all = locality.find_all_localities() "
     "  for k,v in ipairs(all) do "
     "    print('k=',k,'v=',''..v) "
     "    dataflow(v,'pr',k)"

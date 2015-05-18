@@ -28,4 +28,4 @@ end
 HPX_PLAIN_ACTION('fadd','fib','fibs')
 
 f1 = fib(30)
-print(f1:get())
+print(f1:Get())

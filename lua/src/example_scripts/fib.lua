@@ -8,7 +8,7 @@ function fib(n)
   local n2 = fib(n-2)
   --calling get() is inefficient,
   --especially in lua. See fib2.lua
-  return n2 + n1:get()
+  return n2 + n1:Get()
 end
 ------------------------------
 --Need to register functions to
