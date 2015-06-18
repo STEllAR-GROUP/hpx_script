@@ -63,6 +63,10 @@ int async(lua_State *L);
 int luax_wait_all(lua_State *L);
 int luax_when_any(lua_State *L);
 int unwrap(lua_State *L);
+int find_here(lua_State *L);
+int all_localities(lua_State *L);
+int remote_localities(lua_State *L);
+int root_locality(lua_State *L);
 
 int hpx_reg(lua_State *L);
 
@@ -261,6 +265,15 @@ private:
     lua_setglobal(L,"hpx_run");
     lua_pushcfunction(L,luax_run_guarded);
     lua_setglobal(L,"run_guarded");
+    lua_pushcfunction(L,find_here);
+    lua_setglobal(L,"find_here");
+    lua_pushcfunction(L,all_localities);
+    lua_setglobal(L,"find_all_localities");
+    lua_pushcfunction(L,remote_localities);
+    lua_setglobal(L,"find_remote_localities");
+    lua_pushcfunction(L,root_locality);
+    lua_setglobal(L,"find_root_locality");
+
     open_future(L);
     luaL_requiref(L, "future", &open_future, 1);
     open_guard(L);

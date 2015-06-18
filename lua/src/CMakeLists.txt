@@ -26,18 +26,17 @@ if(HPX_FOUND)
 
   include_directories(.)
 
-  add_library(xlua xlua.cpp)
 
   add_hpx_executable(xlua
     ESSENTIAL
-    SOURCES lua.cpp)
+    SOURCES lua.cpp xlua.cpp)
 
   add_hpx_executable(hello
     ESSENTIAL
-    SOURCES examples/hello.cpp)
+    SOURCES examples/hello.cpp xlua.cpp)
 
-  target_link_libraries(xlua_exe xlua lua readline)
-  target_link_libraries(hello_exe xlua lua)
+  target_link_libraries(xlua_exe lua readline)
+  target_link_libraries(hello_exe lua)
 else()
   message("Could not find HPX.")
 endif()

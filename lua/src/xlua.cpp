@@ -458,10 +458,6 @@ int open_locality(lua_State *L) {
 
     static const struct luaL_Reg locality_funcs [] = {
         {"new", &new_locality},
-        {"find_here", &find_here},
-        {"find_all_localities", &all_localities},
-        {"find_root_locality", &root_locality},
-        {"find_remote_localities", &remote_localities},
         {NULL, NULL}
     };
 
@@ -675,7 +671,7 @@ ptr_type luax_dataflow2(
   return answers;
 }
 
-//--- Handle dataflow calling from Lua
+//--- Handle async calling from Lua
 ptr_type luax_async2(
     string_ptr fname,
     ptr_type args) {
