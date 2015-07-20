@@ -20,6 +20,7 @@
 #include <hpx/runtime/serialization/map.hpp>
 #include <hpx/runtime/serialization/vector.hpp>
 #include <hpx/runtime/serialization/variant.hpp>
+#include <stdexcept>
 
 #define SHOW_ERROR(L) do { std::cout \
     << "Error: " << __FILE__ << ":" << __LINE__ << " " \
@@ -28,12 +29,13 @@
 #define HERE std::cout << "HERE: " << __FILE__ << ":" << __LINE__ << std::endl
 
 #define OUT(I,V) do { o << I << "] " << V << std::endl; } while(false)
+#define OUT2(I,V,V2) do { o << I << "] " << V << " " << V2 << std::endl; } while(false)
 
-#define STACK show_stack(std::cout,L,__LINE__,true)
+#define STACK show_stack(std::cout,L,__FILE__,__LINE__,true)
 
 namespace hpx {
 
-std::ostream& show_stack(std::ostream& o,lua_State *L,int line,bool recurse=true);
+std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line,bool recurse=true);
 
 /*
  * This class is present because of a bug in boost (?) which
@@ -57,6 +59,9 @@ private:
 inline std::ostream& operator<<(std::ostream& o,const string_wrap& sw) {
   return o << sw.str;
 }
+
+class Holder;
+std::ostream& operator<<(std::ostream&,const Holder&);
 
 int dataflow(lua_State *L);
 int async(lua_State *L);
@@ -84,6 +89,7 @@ int open_locality(lua_State *L);
 int new_future(lua_State *L);
 
 const char *lua_read(lua_State *L,void *data,size_t *size);
+int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
 
 // metatables
 extern const char *future_metatable_name;
@@ -91,6 +97,17 @@ extern const char *guard_metatable_name;
 extern const char *locality_metatable_name;
 
 typedef hpx::naming::id_type locality_type;
+
+struct Bytecode {
+  std::string data;
+private:
+  friend class hpx::serialization::access;
+  template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & data;
+    }
+};
  
 class Holder;
 
@@ -134,7 +151,7 @@ private:
       ar & var;
     }
 public:
-  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, guard_t };
+  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t };
 
   boost::variant<
     Empty,
@@ -142,7 +159,8 @@ public:
     future_type,
     std::string,
     ptr_type,
-    table_type
+    table_type,
+    Bytecode
     > var;
 
   void set(double num_) {
@@ -150,6 +168,9 @@ public:
   }
   void set(std::string& str_) {
     var = str_;
+  }
+  void set(Bytecode& bc_) {
+    var = bc_;
   }
   void set(const char *str_) {
     std::string s(str_);
@@ -172,21 +193,37 @@ public:
       future_type *fc = (future_type *)lua_touserdata(L,-1);
       *fc = boost::get<future_type>(var);
     } else if(var.which() == table_t) {
-      table_type& table = boost::get<table_type>(var);
-      lua_createtable(L,0,table.size());
-      for(auto i=table.begin();i != table.end();++i) {
-        int which = i->first.which();
-        i->second.unpack(L);
-        if(which == 0) {
-          lua_pushnumber(L,(int)boost::get<double>(i->first));
+      try {
+        table_type& table = boost::get<table_type>(var);
+        lua_createtable(L,0,table.size());
+        for(auto i=table.begin();i != table.end();++i) {
+          const int which = i->first.which();
+          if(which == 0) { // number
+            double d = boost::get<double>(i->first);
+            lua_pushnumber(L,d);
+            if(d == 0) {
+              std::cout << "unpack:PRINT=" << (*this) << std::endl;
+              abort();
+            }
+          } else if(which == 1) { // string
+            std::string str = boost::get<std::string>(i->first);
+            lua_pushstring(L,str.c_str());
+          } else {
+            std::cout << "ERROR: Unknown type: " << which << std::endl;
+            abort();
+          }
+          i->second.unpack(L);
           lua_settable(L,-3);
-        } else {
-          std::string str = boost::get<std::string>(i->first);
-          lua_setfield(L,-2,str.c_str());
         }
+      } catch(std::exception e) {
+        std::cout << "EX2=" << e.what() << std::endl;
       }
+    } else if(var.which() == bytecode_t) {
+      Bytecode& bc = boost::get<Bytecode>(var);
+      lua_load(L,(lua_Reader)lua_read,(void *)&bc.data,"func","b");
     } else {
       std::cout << "ERROR: Unknown type: " << var.which() << std::endl;
+      abort();
     }
   }
   void push(ptr_type& vec) {
@@ -201,35 +238,67 @@ public:
     } else if(lua_isuserdata(L,index) && luaL_checkudata(L,index,future_metatable_name) != nullptr) {
       var = *(future_type *)lua_touserdata(L,index);
     } else if(lua_istable(L,index)) {
-      int nn = lua_gettop(L);
-      lua_pushvalue(L,index);
-      lua_pushnil(L);
-      var = table_type();
-      table_type& table = boost::get<table_type>(var);
-      while(lua_next(L,-2) != 0) {
-        lua_pushvalue(L,-2);
-        if(lua_isstring(L,-1)) {
-          const char *keys = lua_tostring(L,-1);
-          if(keys == nullptr)
-            continue;
-          std::string key{keys};
-          Holder h;
-          h.pack(L,-2);
-          if(h.var.which() != empty_t) {
-            table[key] = h;
+      try {
+        int nn = lua_gettop(L);
+        lua_pushvalue(L,index);
+        lua_pushnil(L);
+        var = table_type();
+        table_type& table = boost::get<table_type>(var);
+        while(lua_next(L,-2) != 0) {
+          lua_pushvalue(L,-2);
+          if(lua_isnumber(L,-1)) {
+            double key = lua_tonumber(L,-1);
+            Holder h;
+            h.pack(L,-2);
+            if(h.var.which() != empty_t) {
+              table[key] = h;
+              //STACK;
+              if(key == 0) {
+                std::cout << "pack0:PRINT=" << (*this) << std::endl;
+                abort();
+              }
+            } else {
+              std::cout << "pack1:PRINT=" << (*this) << std::endl;
+              abort();
+            }
+          } else if(lua_isstring(L,-1)) {
+            const char *keys = lua_tostring(L,-1);
+            if(keys == nullptr)
+              continue;
+            std::string key{keys};
+            Holder h;
+            h.pack(L,-2);
+            if(h.var.which() != empty_t) {
+              table[key] = h;
+            } else {
+              std::cout << "pack1:PRINT=" << (*this) << std::endl;
+              abort();
+            }
+          } else {
+            std::cerr << "Can't pack key value!" << lua_type(L,-1) << std::endl;
+            abort();
           }
-        } else if(lua_isnumber(L,-1)) {
-          double key = lua_tonumber(L,-1);
-          Holder h;
-          h.pack(L,-2);
-          if(h.var.which() != empty_t) {
-            table[key] = h;
-          }
+          lua_pop(L,2);
         }
-        lua_pop(L,2);
+        if(lua_gettop(L) > nn)
+          lua_pop(L,lua_gettop(L)-nn);
+        //std::cout << "pack:PRINT=" << (*this) << std::endl;
+      } catch(std::exception e) {
+        std::cout << "EX=" << e.what() << std::endl;
       }
-      if(lua_gettop(L) > nn)
-        lua_pop(L,lua_gettop(L)-nn);
+    } else if(lua_isfunction(L,index)) {
+      lua_pushvalue(L,index);
+      assert(lua_isfunction(L,-1));
+      Bytecode b;
+			lua_dump(L,(lua_Writer)lua_write,&b.data);
+      var = b;
+      lua_pop(L,1);
+    } else if(lua_isnil(L,index)) {
+      Empty e;
+      var = e;
+    } else {
+      std::cerr << "Can't pack value! " << lua_type(L,index) << std::endl;
+      //abort();
     }
   }
 };

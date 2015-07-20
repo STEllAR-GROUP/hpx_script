@@ -29,23 +29,40 @@ const char *locality_metatable_name = "hpx_locality";
 
 guard_type global_guarded{new Guard()};
 
-std::ostream& operator<<(std::ostream& o,const Holder& h) {
-  if(h.var.which() == Holder::num_t)
-    return o << "Num(" << boost::get<double>(h.var) << ")";
-  if(h.var.which() == Holder::str_t)
-    return o << "Str(" << boost::get<std::string>(h.var) << ")";
-  if(h.var.which() == Holder::fut_t)
-    return o << "Fut()";
-  if(h.var.which() == Holder::table_t)
-    return o << "Table()";
-  if(h.var.which() == Holder::ptr_t)
-    return o << "Vector()";
-  return o << "Empty()";
+std::ostream& operator<<(std::ostream& out,const key_type& kt) {
+  if(kt.which() == 0)
+    out << boost::get<double>(kt) << "{f}";
+  else
+    out << boost::get<std::string>(kt) << "{s}";
+  return out;
+}
+std::ostream& operator<<(std::ostream& out,const Holder& holder) {
+  switch(holder.var.which()) {
+    case Holder::empty_t:
+      break;
+    case Holder::num_t:
+      out << boost::get<double>(holder.var) << "{f}";
+      break;
+    case Holder::str_t:
+      out << boost::get<std::string>(holder.var) << "{s}";
+      break;
+    case Holder::table_t:
+      table_type t = boost::get<table_type>(holder.var);
+      out << "{";
+      for(auto i=t.begin(); i != t.end(); ++i) {
+        if(i != t.begin()) out << ", ";
+        out << i->first << ":" << i->second;
+      }
+      out << "}";
+      break;
+  }
+  return out;
 }
 
 //--- Transfer lua bytecode to/from a std:string
-int lua_write(lua_State *L,const char *str,unsigned long len,luaL_Buffer *buf) {
-    luaL_addlstring(buf,(const char *)str,len);
+int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf) {
+    std::string b(str,len);
+    *buf += b;
     return 0;
 }
 
@@ -56,19 +73,28 @@ const char *lua_read(lua_State *L,void *data,size_t *size) {
 }
 
 //--- Debugging utility, print the Lua stack
-std::ostream& show_stack(std::ostream& o,lua_State *L,int line,bool recurse) {
+std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line,bool recurse) {
     int n = lua_gettop(L);
     if(!recurse)
       o << "RESTACK:n=" << n << std::endl;
     else
-      o << "STACK:n=" << n << " line=" << line << std::endl;
+      o << "STACK:n=" << n << " src: " << fname << ":" << line << std::endl;
     for(int i=1;i<=n;i++) {
         if(lua_isnil(L,i)) OUT(i,"nil");
-        else if(lua_isnumber(L,i)) OUT(i,lua_tonumber(L,i));
-        else if(lua_isstring(L,i)) OUT(i,lua_tostring(L,i));
-        else if(lua_isboolean(L,i)) OUT(i,lua_toboolean(L,i));
-        else if(lua_isfunction(L,i)) OUT(i,"function");
-        else if(lua_iscfunction(L,i)) OUT(i,"c-function");
+        else if(lua_isnumber(L,i)) OUT2(i,lua_tonumber(L,i),"num");
+        else if(lua_isstring(L,i)) OUT2(i,lua_tostring(L,i),"str");
+        else if(lua_isboolean(L,i)) OUT2(i,lua_toboolean(L,i),"bool");
+        else if(lua_isfunction(L,i)) {
+          lua_pushvalue(L,i);
+          std::string bytecode;
+			    lua_dump(L,(lua_Writer)lua_write,&bytecode);
+          lua_pop(L,1);
+          std::ostringstream msg;
+          msg << "function ";
+          msg << bytecode.size();
+          std::string s = msg.str();
+          OUT(i,s.c_str());
+        } else if(lua_iscfunction(L,i)) OUT(i,"c-function");
         else if(lua_isthread(L,i)) OUT(i,"thread");
         else if(lua_isuserdata(L,i)) OUT(i,"userdata");
         else if(lua_istable(L,i)) {
@@ -648,7 +674,6 @@ ptr_type luax_dataflow2(
     // Provide a maximum number output args
     const int max_output_args = 10;
     if(lua_pcall(L,args->size(),max_output_args,0) != 0) {
-      //std::cout << msg.str();
       SHOW_ERROR(L);
       return answers;
     }
@@ -934,13 +959,8 @@ int hpx_reg(lua_State *L) {
 			const int n = lua_gettop(L);
 			std::string fname = lua_tostring(L,-1);
 			lua_getglobal(L,fname.c_str());
-			luaL_Buffer buf;
-			luaL_buffinit(L,&buf);
-			lua_dump(L,(lua_Writer)lua_write,&buf);
-			luaL_pushresult(&buf);
-			const char *data = lua_tostring(L,-1);
-			int len = lua_rawlen(L,-1);
-			std::string bytecode(data,len);
+      std::string bytecode;
+			lua_dump(L,(lua_Writer)lua_write,&bytecode);
 			function_registry[fname]=bytecode;
 			//std::cout << "register(" << fname << "):size=" << len << std::endl;
 			const int nf = lua_gettop(L);
