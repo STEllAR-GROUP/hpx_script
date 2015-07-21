@@ -1,6 +1,8 @@
 #include "xlua.hpp"
 #include <hpx/lcos/broadcast.hpp>
 
+const int max_output_args = 10;
+
 #define CHECK_STRING(INDEX,NAME) \
   if(!lua_isstring(L,INDEX)) { \
     luai_writestringerror("Argument to '%s' is not a string ",NAME);\
@@ -47,13 +49,32 @@ std::ostream& operator<<(std::ostream& out,const Holder& holder) {
       out << boost::get<std::string>(holder.var) << "{s}";
       break;
     case Holder::table_t:
-      table_type t = boost::get<table_type>(holder.var);
-      out << "{";
-      for(auto i=t.begin(); i != t.end(); ++i) {
-        if(i != t.begin()) out << ", ";
-        out << i->first << ":" << i->second;
+      {
+        table_type t = boost::get<table_type>(holder.var);
+        out << "{";
+        for(auto i=t.begin(); i != t.end(); ++i) {
+          if(i != t.begin()) out << ", ";
+          out << i->first << ":" << i->second;
+        }
+        out << "}";
       }
-      out << "}";
+      break;
+    case Holder::fut_t:
+      out << "Fut()";
+      break;
+    case Holder::ptr_t:
+      {
+        ptr_type p = boost::get<ptr_type>(holder.var);
+        out << "{";
+        for(auto i=p->begin();i != p->end();++i) {
+          if(i != p->begin()) out << ", ";
+          out << *i;
+        }
+        out << "}";
+      }
+      break;
+    default:
+      out << "Unk(" << holder.var.which() << ")";
       break;
   }
   return out;
@@ -202,6 +223,9 @@ int hpx_future_get(lua_State *L) {
     for(auto i=result->begin();i!=result->end();++i) {
       i->unpack(L);
     }
+    // Need to make sure something is returned
+    if(result->size()==0)
+      lua_pushnil(L);
   }
   return 1;
 }
@@ -224,7 +248,7 @@ int luax_wait_all(lua_State *L) {
         n++;
         const int ix = -2;
         if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
-          luai_writestringerror("Argument %d to when_any() is not a future ",n);
+          luai_writestringerror("Argument %d to wait_all() is not a future ",n);
           return 0;
         }
         future_type *fnc = (future_type *)lua_touserdata(L,ix);
@@ -248,6 +272,61 @@ int luax_wait_all(lua_State *L) {
   return 1;
 }
 
+ptr_type luax_when_all2(std::vector<future_type> result) {
+  ptr_type pt{new std::vector<Holder>};
+  table_type t;
+  int n = 1;
+  for(auto i=result.begin();i != result.end();++i) {
+    Holder h;
+    h.var = *i;
+    t[n++] = h;
+  }
+  Holder h;
+  h.var = t;
+  pt->push_back(h);
+
+  return pt;
+}
+
+int luax_when_all(lua_State *L) {
+  int nargs = lua_gettop(L);
+  std::vector<future_type> v;
+  for(int i=1;i<=nargs;i++) {
+    if(lua_istable(L,i) && nargs==1) {
+      int top = lua_gettop(L);
+      lua_pushvalue(L,i);
+      lua_pushnil(L);
+      int n = 0;
+      while(lua_next(L,-2)) {
+        lua_pushvalue(L,-2);
+        n++;
+        const int ix = -2;
+        if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
+          luai_writestringerror("Argument %d to wait_all() is not a future ",n);
+          return 0;
+        }
+        future_type *fnc = (future_type *)lua_touserdata(L,ix);
+        v.push_back(*fnc);
+        lua_pop(L,2);
+      }
+      if(lua_gettop(L) > top)
+        lua_pop(L,lua_gettop(L)-top);
+    } else if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+      future_type *fnc = (future_type *)lua_touserdata(L,i);
+      v.push_back(*fnc);
+    }
+  }
+
+  new_future(L);
+  future_type *fc =
+    (future_type *)lua_touserdata(L,-1);
+
+  hpx::shared_future<std::vector<future_type>> result = hpx::when_all(v);
+  *fc = result.then(hpx::util::unwrapped(boost::bind(luax_when_all2,_1)));
+
+  return 1;
+}
+
 ptr_type get_when_any_result(hpx::when_any_result< std::vector< future_type > > result) {
   ptr_type p{new std::vector<Holder>()};
   //Holder h;
@@ -256,8 +335,9 @@ ptr_type get_when_any_result(hpx::when_any_result< std::vector< future_type > > 
   table_type t;
   t["index"].var = result.index+1;
   table_type t2;
-  for(int i=0;i<result.futures.size();i++)
+  for(int i=0;i<result.futures.size();i++) {
     t2[i+1].var = result.futures[i];
+  }
   t["futures"].var = t2;
   Holder h;
   h.var = t;
@@ -319,6 +399,9 @@ int hpx_future_then(lua_State *L) {
       h.pack(L,i);
       h.push(args);
     }
+    Holder h;
+    h.var = *fnc;
+    h.push(args);
 
     new_future(L);
     future_type *fc =
@@ -672,7 +755,6 @@ ptr_type luax_dataflow2(
     //std::ostringstream msg;
     //show_stack(msg,L,__LINE__);
     // Provide a maximum number output args
-    const int max_output_args = 10;
     if(lua_pcall(L,args->size(),max_output_args,0) != 0) {
       SHOW_ERROR(L);
       return answers;
@@ -1047,6 +1129,22 @@ int hpx_srun(lua_State *L,std::string& fname,ptr_type gdata) {
     SHOW_ERROR(L);
     return 0;
   }
+  return 1;
+}
+
+int make_ready_future(lua_State *L) {
+  ptr_type pt{new std::vector<Holder>};
+  int nargs = lua_gettop(L);
+  for(int i=1;i<=nargs;i++) {
+    Holder h;
+    h.pack(L,i);
+    h.push(pt);
+  }
+  lua_pop(L,nargs);
+  new_future(L);
+  future_type *fc =
+    (future_type *)lua_touserdata(L,-1);
+  *fc = make_ready_future(pt);
   return 1;
 }
 

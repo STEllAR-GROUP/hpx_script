@@ -64,8 +64,10 @@ class Holder;
 std::ostream& operator<<(std::ostream&,const Holder&);
 
 int dataflow(lua_State *L);
+int make_ready_future(lua_State *L);
 int async(lua_State *L);
 int luax_wait_all(lua_State *L);
+int luax_when_all(lua_State *L);
 int luax_when_any(lua_State *L);
 int unwrap(lua_State *L);
 int find_here(lua_State *L);
@@ -316,12 +318,16 @@ private:
   public:
   Lua() : busy(true), L(luaL_newstate()) {
     luaL_openlibs(L);
+    lua_pushcfunction(L,make_ready_future);
+    lua_setglobal(L,"make_ready_future");
     lua_pushcfunction(L,dataflow);
     lua_setglobal(L,"dataflow");
     lua_pushcfunction(L,async);
     lua_setglobal(L,"async");
     lua_pushcfunction(L,luax_wait_all);
     lua_setglobal(L,"wait_all");
+    lua_pushcfunction(L,luax_when_all);
+    lua_setglobal(L,"when_all");
     lua_pushcfunction(L,luax_when_any);
     lua_setglobal(L,"when_any");
     lua_pushcfunction(L,unwrap);
