@@ -389,7 +389,7 @@ int hpx_future_then(lua_State *L) {
     future_type *fnc = (future_type *)lua_touserdata(L,1);
     
     CHECK_STRING(2,"Future:Then()")
-    string_ptr fname(new string_wrap(lua_tostring(L,2)));
+    string_ptr fname(new std::string(lua_tostring(L,2)));
 
     // Package up the arguments
     ptr_type args(new std::vector<Holder>());
@@ -879,7 +879,7 @@ namespace hpx {
 int luax_run_guarded(lua_State *L) {
   int n = lua_gettop(L);
   CHECK_STRING(-1,"run_guarded")
-  string_ptr fname(new string_wrap(lua_tostring(L,-1)));
+  string_ptr fname(new std::string(lua_tostring(L,-1)));
   guard_type g;
   if(n == 1) {
     g = global_guarded;
@@ -939,7 +939,7 @@ int dataflow(lua_State *L) {
     }
     
     CHECK_STRING(1,"dataflow")
-    string_ptr fname(new string_wrap(lua_tostring(L,1)));
+    string_ptr fname(new std::string(lua_tostring(L,1)));
 
     // Launch the thread
     future_type f =
@@ -972,7 +972,7 @@ int async(lua_State *L) {
     }
     
     CHECK_STRING(1,"async")
-    string_ptr fname(new string_wrap(lua_tostring(L,1)));
+    string_ptr fname(new std::string(lua_tostring(L,1)));
 
     // Launch the thread
     future_type f =
@@ -999,7 +999,7 @@ int unwrap(lua_State *L) {
     }
     
     CHECK_STRING(1,"unwrap")
-    string_ptr fname(new string_wrap(lua_tostring(L,1)));
+    string_ptr fname(new std::string(lua_tostring(L,1)));
 
     future_type f =
       luax_dataflow(fname,args);
@@ -1073,7 +1073,7 @@ void hpx_srun(string_ptr fname,ptr_type gdata,guard_type *gv,int ng) {
     for(auto i=gdata->begin();i!=gdata->end();++i) {
       i->unpack(L);
     }
-    hpx_srun(L,fname->str,gdata);
+    hpx_srun(L,*fname,gdata);
     gdata->clear();
 
     // Trim stack

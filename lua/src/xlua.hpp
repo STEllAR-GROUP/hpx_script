@@ -37,29 +37,6 @@ namespace hpx {
 
 std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line,bool recurse=true);
 
-/*
- * This class is present because of a bug in boost (?) which
- * prevents the serialization of shared_ptr<string>.
- */
-struct string_wrap {
-  std::string str;
-  const char *c_str() const { return str.c_str(); }
-  operator const std::string&() const { return str; }
-  string_wrap() {}
-  string_wrap(const char *s) : str(s) {}
-  ~string_wrap() {}
-private:
-    friend class hpx::serialization::access;
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-      ar & str;
-    }
-};
-inline std::ostream& operator<<(std::ostream& o,const string_wrap& sw) {
-  return o << sw.str;
-}
-
 class Holder;
 std::ostream& operator<<(std::ostream&,const Holder&);
 
@@ -127,7 +104,7 @@ struct Guard {
 };
 typedef boost::shared_ptr<Guard> guard_type;
 
-typedef boost::shared_ptr<string_wrap> string_ptr;
+typedef boost::shared_ptr<std::string> string_ptr;
 
 int hpx_srun(lua_State *L,std::string& fname,ptr_type p);
 void hpx_srun(string_ptr fname,ptr_type p,guard_type*,int);
