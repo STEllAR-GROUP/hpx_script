@@ -25,11 +25,11 @@ int main() {
 
     // Define functions to be used by hpx
     "function pr(arg) "
-    "  here = locality.find_here() "
+    "  here = find_here() "
     "  print('hello from '..here..' value = '..arg)"
     "end "
     "function do_stuff(a) "
-    "  all = locality.find_all_localities() "
+    "  all = find_all_localities() "
     "  for k,v in ipairs(all) do "
     "    print('k=',k,'v=',''..v) "
     "    dataflow(v,'pr',k)"
@@ -38,7 +38,7 @@ int main() {
     "end "
     
     // Register functions
-    "hpx_reg('pr','do_stuff') "
+    "HPX_PLAIN_ACTION('pr','do_stuff') "
     );
 
   // Call a function. First, get the function onto the stack

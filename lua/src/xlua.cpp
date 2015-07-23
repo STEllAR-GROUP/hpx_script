@@ -631,7 +631,7 @@ void my_when_all2(
   const int n = futs.size();
   for(;index < n;index++) {
     if(!futs[index].is_ready()) {
-      auto shared_state = hpx::lcos::detail::get_shared_state(futs[index]);
+      auto shared_state = hpx::traits::detail::get_shared_state(futs[index]);
       auto f = hpx::util::bind(my_when_all2<Future>,pr,futs,index+1);
       shared_state->set_on_completed(f);
       return;
@@ -650,7 +650,7 @@ hpx::future<std::vector<Future> > my_when_all(
     if(!futs[index].is_ready()) {
       auto p = new hpx::lcos::local::promise<std::vector<Future> >();
       auto fut = p->get_future();
-      auto shared_state = hpx::lcos::detail::get_shared_state(futs[index]);
+      auto shared_state = hpx::traits::detail::get_shared_state(futs[index]);
       auto f = hpx::util::bind(my_when_all2<Future>,p,futs,index+1);
       shared_state->set_on_completed(f);
       return fut;
@@ -670,7 +670,7 @@ hpx::future<std::vector<Future> > my_when_all(
     if(!futs[index].is_ready()) {
       auto p = new hpx::lcos::local::promise<std::vector<Future> >();
       auto fut = p->get_future();
-      auto shared_state = hpx::lcos::detail::get_shared_state(futs[index]);
+      auto shared_state = hpx::traits::detail::get_shared_state(futs[index]);
       auto f = hpx::util::bind(my_when_all2<Future>,p,futs,index+1);
       shared_state->set_on_completed(f);
       return fut;
@@ -685,6 +685,20 @@ boost::shared_ptr<std::vector<ptr_type> > realize_when_all_inputs_step2(ptr_type
   for(auto i=results.begin();i != results.end();++i) {
     results_step2->push_back(i->get());
   }
+  #if 0
+  std::vector<future_type> futs;
+  for(auto j=results_step2->begin();j != results_step2->end();++j) {
+    ptr_type& p = *j;
+    for(auto i=p->begin();i != p->end();++i) {
+      if(i->var.which() == Holder::fut_t) {
+        futs.push_back(boost::get<future_type>(i->var));
+      }
+    }
+  }
+  if(futs.size() == 0)
+  hpx::future<std::vector<future_type> > result = WHEN_ALL(futs);
+  return result.then(hpx::util::unwrapped(boost::bind(realize_when_all_inputs_step2,args,_1)));
+  #endif
   return results_step2;
 }
 
@@ -1190,7 +1204,7 @@ int make_ready_future(lua_State *L) {
   new_future(L);
   future_type *fc =
     (future_type *)lua_touserdata(L,-1);
-  *fc = make_ready_future(pt);
+  *fc = hpx::make_ready_future(pt);
   return 1;
 }
 

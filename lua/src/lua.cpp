@@ -65,7 +65,7 @@ extern "C" {
 */
 
 #include <hpx/hpx_main.hpp>
-#include <xlua_trimmed.hpp>
+#include <xlua.hpp>
 
 #if defined(LUA_USE_READLINE)
 
