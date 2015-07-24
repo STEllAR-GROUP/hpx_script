@@ -11,6 +11,10 @@ const int max_output_args = 10;
 
 namespace hpx {
 
+inline bool is_bytecode(const std::string& s) {
+  return s.size() > 4 && s[0] == 27 && s[1] == 'L' && s[2] == 'u' && s[3] == 'a';
+}
+
 LuaEnv::LuaEnv() {
   ptr = get_lua_ptr();
   if(ptr->busy) {
@@ -232,8 +236,7 @@ int hpx_future_get(lua_State *L) {
 
 ptr_type luax_async2(
     string_ptr func,
-    ptr_type args,
-    bool is_bytecode);
+    ptr_type args);
 
 int luax_wait_all(lua_State *L) {
   int nargs = lua_gettop(L);
@@ -385,25 +388,15 @@ int luax_when_any(lua_State *L) {
   return 1;
 }
 
-std::string getfunc(lua_State *L,int index,bool& is_bytecode) {
+std::string getfunc(lua_State *L,int index) {
   std::string func;
   if(lua_isstring(L,index)) {
-    is_bytecode = false;
     func = lua_tostring(L,index);
   } else if(lua_isfunction(L,index)) {
-    is_bytecode = true;
     lua_pushvalue(L,index);
-    STACK;
     assert(lua_isfunction(L,-1));
     lua_dump(L,(lua_Writer)lua_write,&func);
-    for(int i=0;i<4;i++)
-    std::cout << "Func" << i << "=" << (int)func[i] << ": " << func[i] << std::endl;
 
-    if(lua_pcall(L,0,max_output_args,0) != 0) {
-      SHOW_ERROR(L);
-    }
-    lua_pop(L,1);
-    std::cout << "loaded func, size = " << func.size() << std::endl;
   } else {
     func = "**error**";
     abort();
@@ -416,9 +409,8 @@ int hpx_future_then(lua_State *L) {
     future_type *fnc = (future_type *)lua_touserdata(L,1);
     
     CHECK_STRING(2,"Future:Then()")
-    bool is_bytecode;
     string_ptr fname{new std::string};
-    *fname = getfunc(L,2,is_bytecode);
+    *fname = getfunc(L,2);
 
     // Package up the arguments
     ptr_type args(new std::vector<Holder>());
@@ -435,7 +427,7 @@ int hpx_future_then(lua_State *L) {
     new_future(L);
     future_type *fc =
       (future_type *)lua_touserdata(L,-1);
-    *fc = fnc->then(boost::bind(luax_async2,fname,args,is_bytecode));
+    *fc = fnc->then(boost::bind(luax_async2,fname,args));
   }
   return 1;
 }
@@ -744,7 +736,6 @@ ptr_type luax_dataflow2(
     string_ptr fname,
     ptr_type args,
     boost::shared_ptr<std::vector<ptr_type> > futs) {
-
   ptr_type answers(new std::vector<Holder>());
 
   {
@@ -754,30 +745,35 @@ ptr_type luax_dataflow2(
 
     bool found = false;
 
-    lua_getglobal(L,fname->c_str());
-    if(lua_isfunction(L,-1)) {
-      found = true;
-    }
+    lua_pop(L,lua_gettop(L));
 
-    if(!found) {
-      if(function_registry.find(*fname) == function_registry.end()) {
-        std::cout << "Function '" << *fname << "' is not defined." << std::endl;
-        return answers;
-      }
-
-      std::string bytecode = function_registry[*fname];
-      if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,fname->c_str(),"b") != 0) {
-        std::cout << "Error in function: '" << *fname << "' size=" << bytecode.size() << std::endl;
+    if(is_bytecode(*fname)) {
+      if(lua_load(L,(lua_Reader)lua_read,(void *)fname.get(),0,"b") != 0) {
+        std::cout << "Error in function: size=" << fname->size() << std::endl;
         SHOW_ERROR(L);
-        return answers;
+      }
+    } else {
+      lua_getglobal(L,fname->c_str());
+      if(lua_isfunction(L,-1)) {
+        found = true;
       }
 
-      lua_setglobal(L,fname->c_str());
-    }
+      if(!found) {
+        if(function_registry.find(*fname) == function_registry.end()) {
+          std::cout << "Function '" << *fname << "' is not defined." << std::endl;
+          return answers;
+        }
 
-    int n = lua_gettop(L);
-    if(n > 0)
-      lua_pop(L,n);
+        std::string bytecode = function_registry[*fname];
+        if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,fname->c_str(),"b") != 0) {
+          std::cout << "Error in function: '" << *fname << "' size=" << bytecode.size() << std::endl;
+          SHOW_ERROR(L);
+          return answers;
+        }
+
+        lua_setglobal(L,fname->c_str());
+      }
+    }
 
     // Push data from the concrete values and ready futures onto the Lua stack
     auto f = futs->begin();
@@ -824,8 +820,7 @@ ptr_type luax_dataflow2(
 //--- Handle async calling from Lua
 ptr_type luax_async2(
     string_ptr fname,
-    ptr_type args,
-    bool is_bytecode) {
+    ptr_type args) {
   ptr_type answers(new std::vector<Holder>());
 
   {
@@ -835,15 +830,12 @@ ptr_type luax_async2(
 
     bool found = false;
 
-    if(is_bytecode) {
-      if(lua_load(L,(lua_Reader)lua_read,(void *)&fname,"__func__","b") != 0) {
+    lua_pop(L,lua_gettop(L));
+
+    if(is_bytecode(*fname)) {
+      if(lua_load(L,(lua_Reader)lua_read,(void *)fname.get(),0,"b") != 0) {
         std::cout << "Error in function: size=" << fname->size() << std::endl;
-        std::cout << "Func=" << (int)(*fname)[0];
-        for(int i=1;i<4;i++) {
-          std::cout << (*fname)[i];
-        }
         SHOW_ERROR(L);
-        return answers;
       }
     } else {
       lua_getglobal(L,fname->c_str());
@@ -868,21 +860,11 @@ ptr_type luax_async2(
       }
     }
 
-    int n = lua_gettop(L);
-    if(n > 0)
-      lua_pop(L,n);
-
     // Push data from the concrete values and ready futures onto the Lua stack
     for(auto i=args->begin();i!=args->end();++i) {
       i->unpack(L);
     }
 
-    lua_getglobal(L,fname->c_str());
-    lua_insert(L,1);
-
-    //std::ostringstream msg;
-    //show_stack(msg,L,__LINE__);
-    // Provide a maximum number output args
     const int max_output_args = 10;
     if(lua_pcall(L,args->size(),max_output_args,0) != 0) {
       //std::cout << msg.str();
@@ -994,8 +976,8 @@ int dataflow(lua_State *L) {
       h.push(args);
     }
     
-    CHECK_STRING(1,"dataflow")
-    string_ptr fname(new std::string(lua_tostring(L,1)));
+    string_ptr fname(new std::string);
+    *fname = getfunc(L,1);
 
     // Launch the thread
     future_type f =
@@ -1028,15 +1010,14 @@ int async(lua_State *L) {
     }
     
     //CHECK_STRING(1,"async")
-    bool is_bytecode;
     string_ptr fname{new std::string};
-    *fname = getfunc(L,1,is_bytecode);
+    *fname = getfunc(L,1);
 
     // Launch the thread
     future_type f =
       (loc == nullptr) ?
-        hpx::async(luax_async2,fname,args,is_bytecode) :
-        hpx::async<luax_async_action>(*loc,fname,args,is_bytecode);
+        hpx::async(luax_async2,fname,args) :
+        hpx::async<luax_async_action>(*loc,fname,args);
 
     new_future(L);
     future_type *fc =
@@ -1045,11 +1026,26 @@ int async(lua_State *L) {
     return 1;
 }
 
+void unwrap_future(lua_State *L,int index,future_type& f) {
+  ptr_type p = f.get();
+  if(p->size() == 1) {
+    if((*p)[0].var.which() == Holder::fut_t) {
+      future_type& f2 = boost::get<future_type>((*p)[0].var);
+      unwrap_future(L,index,f2);
+    } else {
+      (*p)[0].unpack(L);
+      STACK;
+      lua_replace(L,index);
+      STACK;
+    }
+  }
+}
+
 int unwrap(lua_State *L) {
 
+    #if 0
     // Package up the arguments
     ptr_type args(new std::vector<Holder>());
-    int nargs = lua_gettop(L);
     for(int i=2;i<=nargs;i++) {
       Holder h;
       h.pack(L,i);
@@ -1068,6 +1064,15 @@ int unwrap(lua_State *L) {
     future_type *fc =
       (future_type *)lua_touserdata(L,-1);
     *fc = f;
+    return 1;
+    #endif
+    int nargs = lua_gettop(L);
+    for(int i=1;i<=nargs;i++) {
+      if(lua_isuserdata(L,i) && luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+        future_type *fc = (future_type *)lua_touserdata(L,i);
+        unwrap_future(L,i,*fc);
+      }
+    }
     return 1;
 }
 
