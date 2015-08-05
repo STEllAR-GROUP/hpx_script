@@ -40,6 +40,7 @@ std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line
 class Holder;
 std::ostream& operator<<(std::ostream&,const Holder&);
 
+int call(lua_State *L);
 int dataflow(lua_State *L);
 int make_ready_future(lua_State *L);
 int async(lua_State *L);
@@ -61,6 +62,8 @@ int hpx_run(lua_State *L);
 
 int luax_run_guarded(lua_State *L);
 
+int open_table(lua_State *L);
+int open_table_iter(lua_State *L);
 int open_future(lua_State *L);
 int open_guard(lua_State *L);
 int open_locality(lua_State *L);
@@ -72,6 +75,7 @@ int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
 
 // metatables
 extern const char *future_metatable_name;
+extern const char *table_metatable_name;
 extern const char *guard_metatable_name;
 extern const char *locality_metatable_name;
 
@@ -94,6 +98,11 @@ typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
 typedef boost::variant<double,std::string> key_type;
 typedef std::map<key_type,Holder> table_type;
+typedef boost::shared_ptr<std::map<key_type,Holder> > table_ptr;
+struct table_iter_type {
+  bool ready = false;
+  table_type::iterator begin, end;
+};
 typedef std::vector<Holder> array_type;
 
 struct Guard {
@@ -188,7 +197,7 @@ public:
             std::string str = boost::get<std::string>(i->first);
             lua_pushstring(L,str.c_str());
           } else {
-            std::cout << "ERROR: Unknown type: " << which << std::endl;
+            std::cout << "ERROR: Unknown key type: " << which << std::endl;
             abort();
           }
           i->second.unpack(L);
@@ -200,6 +209,8 @@ public:
     } else if(var.which() == bytecode_t) {
       Bytecode& bc = boost::get<Bytecode>(var);
       lua_load(L,(lua_Reader)lua_read,(void *)&bc.data,"func","b");
+    } else if(var.which() == empty_t) {
+      lua_pushnil(L);
     } else {
       std::cout << "ERROR: Unknown type: " << var.which() << std::endl;
       abort();
@@ -230,7 +241,7 @@ public:
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
-              table[key] = h;
+              (table)[key] = h;
               //STACK;
               if(key == 0) {
                 std::cout << "pack0:PRINT=" << (*this) << std::endl;
@@ -248,7 +259,7 @@ public:
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
-              table[key] = h;
+              (table)[key] = h;
             } else {
               std::cout << "pack1:PRINT=" << (*this) << std::endl;
               abort();
@@ -299,6 +310,8 @@ private:
     lua_setglobal(L,"make_ready_future");
     lua_pushcfunction(L,dataflow);
     lua_setglobal(L,"dataflow");
+    lua_pushcfunction(L,call);
+    lua_setglobal(L,"call");
     lua_pushcfunction(L,async);
     lua_setglobal(L,"async");
     lua_pushcfunction(L,luax_wait_all);
@@ -326,6 +339,10 @@ private:
     lua_pushcfunction(L,root_locality);
     lua_setglobal(L,"find_root_locality");
 
+    open_table(L);
+    luaL_requiref(L, "table_t", &open_table, 1);
+    open_table_iter(L);
+    luaL_requiref(L, "table_iter_t", &open_table_iter, 1);
     open_future(L);
     luaL_requiref(L, "future", &open_future, 1);
     open_guard(L);
@@ -342,6 +359,20 @@ private:
         lua_setglobal(L,i->first.c_str());
       }
     }
+    /*
+    luaL_dostring(L,
+"function __hpx_nextvalue(obj)"
+"  local t = setmetatable({object=obj},{"
+"    __call = function(self,v,k)"
+"      local nk = self.obj.find(k)"
+"      if nk != nil then"
+"        return nk,self.obj[nk]"
+"      end"
+"    end"
+"  })"
+"  return t"
+"end");
+*/
     busy = false;
   }
   ~Lua() {

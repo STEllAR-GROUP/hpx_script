@@ -29,9 +29,13 @@ LuaEnv::~LuaEnv() {
   set_lua_ptr(ptr);
 }
 
+const char *table_metatable_name = "table";
+const char *table_iter_metatable_name = "table_iter";
 const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
 const char *locality_metatable_name = "hpx_locality";
+const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
+  guard_metatable_name, locality_metatable_name,0};
 
 guard_type global_guarded{new Guard()};
 
@@ -121,7 +125,18 @@ std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line
           OUT(i,s.c_str());
         } else if(lua_iscfunction(L,i)) OUT(i,"c-function");
         else if(lua_isthread(L,i)) OUT(i,"thread");
-        else if(lua_isuserdata(L,i)) OUT(i,"userdata");
+        else if(lua_isuserdata(L,i)) {
+          bool found = false;
+          /*
+          for(int j=0;metatables[j] != nullptr;j++) {
+            if(luaL_checkudata(L,i,metatables[j]) != nullptr) {
+              OUT(i,metatables[j]);
+            }
+          }
+          */
+          if(!found)
+            OUT(i,"userdata");
+        }
         else if(lua_istable(L,i)) {
           o << i << "] table" << std::endl;
           if(recurse) {
@@ -499,6 +514,253 @@ int open_guard(lua_State *L) {
 
     return 1;
 }
+//---table_iter structure--//
+
+int new_table_iter(lua_State *L) {
+  size_t nbytes = sizeof(table_iter_type);
+  char *table_iter = (char *)lua_newuserdata(L,nbytes);
+  luaL_setmetatable(L,table_iter_metatable_name);
+  new (table_iter) table_iter_type();
+  return 1;
+}
+
+int hpx_table_iter_clean(lua_State *L) {
+    if(luaL_checkudata(L,-1,table_iter_metatable_name) != nullptr) {
+      table_iter_type *fnc = (table_iter_type *)lua_touserdata(L,-1);
+      dtor(fnc);
+    }
+    return 1;
+}
+
+int hpx_table_iter_call(lua_State *L) {
+  if(luaL_checkudata(L,1,table_iter_metatable_name) != nullptr) {
+    table_iter_type *fnc = (table_iter_type *)lua_touserdata(L,1);
+    if(fnc->ready && fnc->begin != fnc->end) {
+
+      key_type kt = fnc->begin->first;
+      if(kt.which() == 0)
+        lua_pushnumber(L,boost::get<double>(kt));
+      else
+        lua_pushstring(L,boost::get<std::string>(kt).c_str());
+      lua_replace(L,2);
+
+      Holder h = fnc->begin->second;
+      h.unpack(L);
+      lua_replace(L,3);
+
+      ++fnc->begin;
+      return 2;
+    } else {
+      lua_pushnil(L);
+    }
+  }
+  return 1;
+}
+
+int open_table_iter(lua_State *L) {
+    static const struct luaL_Reg table_iter_meta_funcs [] = {
+        {NULL,NULL},
+    };
+
+    static const struct luaL_Reg table_iter_funcs [] = {
+        {"new", &new_table_iter},
+        {NULL, NULL}
+    };
+
+    luaL_newlib(L,table_iter_funcs);
+
+    luaL_newmetatable(L,table_iter_metatable_name);
+    luaL_newlib(L, table_iter_meta_funcs);
+    lua_setfield(L,-2,"__index");
+
+    lua_pushstring(L,"__gc");
+    lua_pushcfunction(L,hpx_table_iter_clean);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"__call");
+    lua_pushcfunction(L,hpx_table_iter_call);
+    lua_settable(L,-3);
+
+    lua_pop(L,1);
+
+    return 1;
+}
+//---table structure--//
+
+int new_table(lua_State *L) {
+  size_t nbytes = sizeof(table_type);
+  char *table = (char *)lua_newuserdata(L,nbytes);
+  luaL_setmetatable(L,table_metatable_name);
+  new (table) table_type();
+  return 1;
+}
+
+int hpx_table_clean(lua_State *L) {
+    if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
+      table_type *fnc = (table_type *)lua_touserdata(L,-1);
+      dtor(fnc);
+    }
+    return 1;
+}
+
+int table_len(lua_State *L) {
+    if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
+      table_type *fnc = (table_type *)lua_touserdata(L,-1);
+      int sz = (fnc)->size();
+      lua_pop(L,1);
+      lua_pushnumber(L,sz);
+    }
+    return 1;
+}
+
+int table_pairs(lua_State *L) {
+  if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+    table_type *fnc = (table_type *)lua_touserdata(L,-1);
+    new_table_iter(L);
+    table_iter_type *fc =
+      (table_iter_type *)lua_touserdata(L,-1);
+    fc->ready = true;
+    fc->begin = fnc->begin();
+    fc->end   = fnc->end();
+  }
+  return 1;
+}
+
+void push_key(lua_State *L,const key_type& kt) {
+  if(kt.which() == 0) {
+    lua_pushnumber(L,boost::get<double>(kt));
+  } else {
+    lua_pushstring(L,boost::get<std::string>(kt).c_str());
+  }
+}
+
+int hpx_table_find(lua_State *L) {
+  if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+    table_type *fnc = (table_type *)lua_touserdata(L,1);
+    if(lua_isnil(L,2)) {
+      lua_pop(L,lua_gettop(L));
+      auto f = fnc->begin();
+      if(f != fnc->end()) {
+        push_key(L,f->first);
+        Holder h = f->second;
+        h.unpack(L);
+        return 2;
+      } else {
+        lua_pushnil(L);
+      }
+    } else if(lua_isnumber(L,2)) {
+      key_type k = lua_tonumber(L,2);
+      lua_pop(L,lua_gettop(L));
+      auto f = fnc->find(k);
+      if(f != fnc->end())
+        ++f;
+      if(f != fnc->end()) {
+        push_key(L,f->first);
+        Holder h = f->second;
+        h.unpack(L);
+        return 2;
+      } else {
+        lua_pushnil(L);
+      }
+    } else if(lua_isstring(L,2)) {
+      key_type k = lua_tostring(L,2);
+      lua_pop(L,lua_gettop(L));
+      auto f = fnc->find(k);
+      if(f != fnc->end())
+        ++f;
+      if(f != fnc->end()) {
+        push_key(L,f->first);
+        Holder h = f->second;
+        h.unpack(L);
+        return 2;
+      } else {
+        lua_pushnil(L);
+      }
+    } else {
+      lua_pushnil(L);
+    }
+  }
+  return 1;
+}
+
+int table_new_index(lua_State *L) {
+    if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+      table_type *fnc = (table_type *)lua_touserdata(L,1);
+      Holder h;
+      if(lua_gettop(L)==3) { // set
+        h.pack(L,3);
+        if(lua_isnumber(L,2)) {
+          double key = lua_tonumber(L,2);
+          (*fnc)[key] = h;
+        } else {
+          std::string key = lua_tostring(L,2);
+          (*fnc)[key] = h;
+        }
+      } else {// get
+        if(lua_isnumber(L,2)) {
+          double key = lua_tonumber(L,2);
+          h = (*fnc)[key];
+        } else {
+          std::string key = lua_tostring(L,2);
+          if(key == "find") {
+            lua_pop(L,2);
+            lua_pushcfunction(L,hpx_table_find);
+            return 1;
+          }
+          h = (*fnc)[key];
+        }
+        lua_pop(L,2);
+        h.unpack(L);
+      }
+    }
+    return 1;
+}
+
+int open_table(lua_State *L) {
+    static const struct luaL_Reg table_meta_funcs [] = {
+        {"find",&hpx_table_find},
+        {NULL,NULL},
+    };
+
+    static const struct luaL_Reg table_funcs [] = {
+        {"new", &new_table},
+        {NULL, NULL}
+    };
+
+    luaL_newlib(L,table_funcs);
+
+    luaL_newmetatable(L,table_metatable_name);
+    //luaL_newlib(L, table_meta_funcs);
+    //lua_setfield(L,-2,"__index");
+
+    lua_pushstring(L,"__gc");
+    lua_pushcfunction(L,hpx_table_clean);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"__len");
+    lua_pushcfunction(L,table_len);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"__newindex");
+    lua_pushcfunction(L,table_new_index);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"__index");
+    lua_pushcfunction(L,table_new_index);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"__pairs");
+    lua_pushcfunction(L,table_pairs);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"find");
+    lua_pushcfunction(L,hpx_table_find);
+    lua_settable(L,-3);
+
+    lua_pop(L,1);
+
+    return 1;
+}
 
 //---locality structure--//
 
@@ -729,6 +991,46 @@ future_type realize_when_all_outputs(ptr_type args) {
   }
   hpx::future<std::vector<future_type> > result = WHEN_ALL(std::move(futs));
   return result.then(hpx::util::unwrapped(boost::bind(realize_when_all_outputs_step2,args,_1)));
+}
+
+int call(lua_State *L) {
+  ptr_type pt{new std::vector<Holder>};
+  std::string func;
+  STACK;
+  if(lua_istable(L,-1)) {
+    // Func
+    lua_pushstring(L,"func");
+    lua_gettable(L,-2);
+    if(lua_isfunction(L,-1)) {
+      STACK;
+      lua_dump(L,(lua_Writer)lua_write,&func);
+      lua_pop(L,1);
+    } else if(lua_isstring(L,-1)) {
+      func = lua_tostring(L,-1);
+      lua_pop(L,1);
+    } else {
+      lua_pushstring(L,"No function supplied to call");
+      return 0;
+    }
+    // Args
+    lua_pushstring(L,"args");
+    lua_gettable(L,-2);
+    if(lua_istable(L,-1)) {
+      lua_pushnil(L);
+      while(lua_next(L,-2) != 0) {
+        lua_pushvalue(L,-2);
+        std::string k = lua_tostring(L,-1);
+        std::string v = lua_tostring(L,-2);
+        std::cout << "call k=" << k << " v=" << v << std::endl;
+        lua_pop(L,2);
+      }
+      lua_pop(L,1);
+    } else {
+      lua_pushstring(L,"args is not a table");
+      return 0;
+    }
+  }
+  return 1;
 }
 
 //--- Handle dataflow calling from Lua
