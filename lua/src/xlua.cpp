@@ -58,10 +58,10 @@ std::ostream& operator<<(std::ostream& out,const Holder& holder) {
       break;
     case Holder::table_t:
       {
-        table_type t = boost::get<table_type>(holder.var);
+        table_ptr t = boost::get<table_ptr>(holder.var);
         out << "{";
-        for(auto i=t.begin(); i != t.end(); ++i) {
-          if(i != t.begin()) out << ", ";
+        for(auto i=t->begin(); i != t->end(); ++i) {
+          if(i != t->begin()) out << ", ";
           out << i->first << ":" << i->second;
         }
         out << "}";
@@ -293,12 +293,12 @@ int luax_wait_all(lua_State *L) {
 
 ptr_type luax_when_all2(std::vector<future_type> result) {
   ptr_type pt{new std::vector<Holder>};
-  table_type t;
+  table_ptr t{new table_type()};
   int n = 1;
   for(auto i=result.begin();i != result.end();++i) {
     Holder h;
     h.var = *i;
-    t[n++] = h;
+    (*t)[n++] = h;
   }
   Holder h;
   h.var = t;
@@ -351,13 +351,13 @@ ptr_type get_when_any_result(hpx::when_any_result< std::vector< future_type > > 
   //Holder h;
   //h.var = result.index;
   //p->push_back(h);
-  table_type t;
-  t["index"].var = result.index+1;
-  table_type t2;
+  table_ptr t{new table_type()};
+  (*t)["index"].var = result.index+1;
+  table_ptr t2{new table_type()};
   for(int i=0;i<result.futures.size();i++) {
-    t2[i+1].var = result.futures[i];
+    (*t2)[i+1].var = result.futures[i];
   }
-  t["futures"].var = t2;
+  (*t)["futures"].var = t2;
   Holder h;
   h.var = t;
   p->push_back(h);
@@ -588,16 +588,16 @@ int open_table_iter(lua_State *L) {
 //---table structure--//
 
 int new_table(lua_State *L) {
-  size_t nbytes = sizeof(table_type);
+  size_t nbytes = sizeof(table_ptr);
   char *table = (char *)lua_newuserdata(L,nbytes);
   luaL_setmetatable(L,table_metatable_name);
-  new (table) table_type();
+  new (table) table_ptr(new table_type());
   return 1;
 }
 
 int hpx_table_clean(lua_State *L) {
     if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
-      table_type *fnc = (table_type *)lua_touserdata(L,-1);
+      table_ptr *fnc = (table_ptr *)lua_touserdata(L,-1);
       dtor(fnc);
     }
     return 1;
@@ -605,7 +605,8 @@ int hpx_table_clean(lua_State *L) {
 
 int table_len(lua_State *L) {
     if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
-      table_type *fnc = (table_type *)lua_touserdata(L,-1);
+      table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,-1);
+      table_ptr& fnc = *fnc_p;
       int sz = 0;
       for(;fnc->find(sz+1) != fnc->end();++sz)
         ;
@@ -622,7 +623,8 @@ int table_clos_iter(lua_State *L) {
   if(lua_isnumber(L,-1))
     index = lua_tonumber(L,-1);
   int next_index = index+1;
-  table_type *fnc = (table_type*)lua_touserdata(L,lua_upvalueindex(1));
+  table_ptr *fnc_p = (table_ptr*)lua_touserdata(L,lua_upvalueindex(1));
+  table_ptr& fnc = *fnc_p;
   lua_pop(L,lua_gettop(L));
   lua_pushnumber(L,next_index);
   auto ptr = fnc->find(next_index);
@@ -635,7 +637,8 @@ int table_clos_iter(lua_State *L) {
 
 int table_pairs(lua_State *L) {
   if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
-    table_type *fnc = (table_type *)lua_touserdata(L,-1);
+    table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,-1);
+    table_ptr& fnc = *fnc_p;
     new_table_iter(L);
     table_iter_type *fc =
       (table_iter_type *)lua_touserdata(L,-1);
@@ -663,7 +666,8 @@ void push_key(lua_State *L,const key_type& kt) {
 
 int hpx_table_find(lua_State *L) {
   if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
-    table_type *fnc = (table_type *)lua_touserdata(L,1);
+    table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
+    table_ptr fnc = *fnc_p;
     if(lua_isnil(L,2)) {
       lua_pop(L,lua_gettop(L));
       auto f = fnc->begin();
@@ -712,7 +716,8 @@ int hpx_table_find(lua_State *L) {
 
 int table_new_index(lua_State *L) {
     if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
-      table_type *fnc = (table_type *)lua_touserdata(L,1);
+      table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
+      table_ptr& fnc = *fnc_p;
       Holder h;
       if(lua_gettop(L)==3) { // set
         h.pack(L,3);

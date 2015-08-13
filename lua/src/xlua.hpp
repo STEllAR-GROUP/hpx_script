@@ -99,10 +99,12 @@ typedef hpx::shared_future<ptr_type> future_type;
 typedef boost::variant<double,std::string> key_type;
 typedef std::map<key_type,Holder> table_type;
 typedef boost::shared_ptr<std::map<key_type,Holder> > table_ptr;
+
 struct table_iter_type {
   bool ready = false;
   table_type::iterator begin, end;
 };
+
 typedef std::vector<Holder> array_type;
 
 struct Guard {
@@ -147,7 +149,7 @@ public:
     future_type,
     std::string,
     ptr_type,
-    table_type,
+    table_ptr,
     Bytecode
     > var;
 
@@ -182,9 +184,9 @@ public:
       *fc = boost::get<future_type>(var);
     } else if(var.which() == table_t) {
       try {
-        table_type& table = boost::get<table_type>(var);
-        lua_createtable(L,0,table.size());
-        for(auto i=table.begin();i != table.end();++i) {
+        table_ptr& table = boost::get<table_ptr>(var);
+        lua_createtable(L,0,table->size());
+        for(auto i=table->begin();i != table->end();++i) {
           const int which = i->first.which();
           if(which == 0) { // number
             double d = boost::get<double>(i->first);
@@ -232,8 +234,8 @@ public:
         int nn = lua_gettop(L);
         lua_pushvalue(L,index);
         lua_pushnil(L);
-        var = table_type();
-        table_type& table = boost::get<table_type>(var);
+        var = table_ptr(new table_type());
+        table_ptr& table = boost::get<table_ptr>(var);
         while(lua_next(L,-2) != 0) {
           lua_pushvalue(L,-2);
           if(lua_isnumber(L,-1)) {
@@ -241,7 +243,7 @@ public:
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
-              (table)[key] = h;
+              (*table)[key] = h;
               //STACK;
               if(key == 0) {
                 std::cout << "pack0:PRINT=" << (*this) << std::endl;
@@ -259,7 +261,7 @@ public:
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
-              (table)[key] = h;
+              (*table)[key] = h;
             } else {
               std::cout << "pack1:PRINT=" << (*this) << std::endl;
               abort();
