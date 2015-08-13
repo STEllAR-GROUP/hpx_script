@@ -606,11 +606,31 @@ int hpx_table_clean(lua_State *L) {
 int table_len(lua_State *L) {
     if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
       table_type *fnc = (table_type *)lua_touserdata(L,-1);
-      int sz = (fnc)->size();
-      lua_pop(L,1);
+      int sz = 0;
+      for(;fnc->find(sz+1) != fnc->end();++sz)
+        ;
       lua_pushnumber(L,sz);
     }
     return 1;
+}
+
+/**
+ * Implements __ipairs for the table class.
+ */
+int table_clos_iter(lua_State *L) {
+  int index = 0;
+  if(lua_isnumber(L,-1))
+    index = lua_tonumber(L,-1);
+  int next_index = index+1;
+  table_type *fnc = (table_type*)lua_touserdata(L,lua_upvalueindex(1));
+  lua_pop(L,lua_gettop(L));
+  lua_pushnumber(L,next_index);
+  auto ptr = fnc->find(next_index);
+  if(ptr == fnc->end())
+    return 0;
+  Holder h = (*fnc)[next_index];
+  h.unpack(L);
+  return 2;
 }
 
 int table_pairs(lua_State *L) {
@@ -622,6 +642,13 @@ int table_pairs(lua_State *L) {
     fc->ready = true;
     fc->begin = fnc->begin();
     fc->end   = fnc->end();
+  }
+  return 1;
+}
+
+int table_ipairs(lua_State *L) {
+  if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+    lua_pushcclosure(L,&table_clos_iter,1);
   }
   return 1;
 }
@@ -696,10 +723,14 @@ int table_new_index(lua_State *L) {
           std::string key = lua_tostring(L,2);
           (*fnc)[key] = h;
         }
+        return 0;
       } else {// get
         if(lua_isnumber(L,2)) {
           double key = lua_tonumber(L,2);
-          h = (*fnc)[key];
+          auto ptr = fnc->find(key);
+          if(ptr == fnc->end())
+            return 0;
+          h = ptr->second;
         } else {
           std::string key = lua_tostring(L,2);
           if(key == "find") {
@@ -707,7 +738,10 @@ int table_new_index(lua_State *L) {
             lua_pushcfunction(L,hpx_table_find);
             return 1;
           }
-          h = (*fnc)[key];
+          auto ptr = fnc->find(key);
+          if(ptr == fnc->end())
+            return 0;
+          h = ptr->second;
         }
         lua_pop(L,2);
         h.unpack(L);
@@ -751,6 +785,10 @@ int open_table(lua_State *L) {
 
     lua_pushstring(L,"__pairs");
     lua_pushcfunction(L,table_pairs);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"__ipairs");
+    lua_pushcfunction(L,table_ipairs);
     lua_settable(L,-3);
 
     lua_pushstring(L,"find");
