@@ -977,9 +977,15 @@ int hpx_locality_clean(lua_State *L) {
     return 1;
 }
 
+int loc_name(lua_State *L) {
+  lua_pushstring(L,locality_metatable_name);
+  return 1;
+}
+
 int open_locality(lua_State *L) {
     static const struct luaL_Reg locality_meta_funcs [] = {
         {"str",&loc_str},
+        {"Name",&loc_name},
         {NULL,NULL},
     };
 
@@ -1398,6 +1404,17 @@ int isfuture(lua_State *L) {
 
 int istable(lua_State *L) {
     if(cmp_meta(L,-1,table_metatable_name)) {
+      lua_pop(L,1);
+      lua_pushboolean(L,1);
+    } else {
+      lua_pop(L,1);
+      lua_pushboolean(L,0);
+    }
+    return 1;
+}
+
+int islocality(lua_State *L) {
+    if(cmp_meta(L,-1,locality_metatable_name)) {
       lua_pop(L,1);
       lua_pushboolean(L,1);
     } else {

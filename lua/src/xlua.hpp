@@ -57,6 +57,7 @@ int hpx_reg(lua_State *L);
 
 int isfuture(lua_State *L);
 int istable(lua_State *L);
+int islocality(lua_State *L);
 
 int hpx_run(lua_State *L);
 
@@ -356,6 +357,8 @@ private:
     lua_setglobal(L,"unwrap");
     lua_pushcfunction(L,isfuture);
     lua_setglobal(L,"isfuture");
+    lua_pushcfunction(L,islocality);
+    lua_setglobal(L,"islocality");
     lua_pushcfunction(L,istable);
     lua_setglobal(L,"istable");
     lua_pushcfunction(L,hpx_reg);
