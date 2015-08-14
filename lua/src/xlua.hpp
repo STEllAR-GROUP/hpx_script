@@ -257,7 +257,6 @@ public:
     } else if(cmp_meta(L,index,table_metatable_name)) {
       var = *(table_ptr *)lua_touserdata(L,index);
     } else if(lua_istable(L,index)) {
-      HERE;
       try {
         int nn = lua_gettop(L);
         lua_pushvalue(L,index);
@@ -268,6 +267,8 @@ public:
           lua_pushvalue(L,-2);
           if(lua_isnumber(L,-1)) {
             double key = lua_tonumber(L,-1);
+            if(key==table->size+1)
+              table->size = key;
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
