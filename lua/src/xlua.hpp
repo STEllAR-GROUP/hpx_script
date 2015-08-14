@@ -56,6 +56,7 @@ int root_locality(lua_State *L);
 int hpx_reg(lua_State *L);
 
 int isfuture(lua_State *L);
+int istable(lua_State *L);
 
 int hpx_run(lua_State *L);
 
@@ -69,9 +70,11 @@ int open_guard(lua_State *L);
 int open_locality(lua_State *L);
 
 int new_future(lua_State *L);
+int new_table(lua_State *L);
 
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
+bool cmp_meta(lua_State *L,int index,const char *meta_name);
 
 // metatables
 extern const char *future_metatable_name;
@@ -98,7 +101,23 @@ typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
 typedef boost::variant<double,std::string> key_type;
 typedef std::map<key_type,Holder> table_type;
-typedef boost::shared_ptr<std::map<key_type,Holder> > table_ptr;
+//typedef boost::shared_ptr<std::map<key_type,Holder> > table_ptr;
+struct table_inner {
+  table_inner() {}
+  table_inner(const table_type* t_) : t(*t_) {}
+
+  table_type t;
+  int size = 0;
+private:
+  friend class hpx::serialization::access;
+  template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & t;
+      ar & size;
+    }
+};
+typedef boost::shared_ptr<table_inner> table_ptr;
 
 struct table_iter_type {
   bool ready = false;
@@ -183,6 +202,10 @@ public:
       future_type *fc = (future_type *)lua_touserdata(L,-1);
       *fc = boost::get<future_type>(var);
     } else if(var.which() == table_t) {
+      new_table(L);
+      table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
+      *tp = boost::get<table_ptr>(var);
+      /*
       try {
         table_ptr& table = boost::get<table_ptr>(var);
         lua_createtable(L,0,table->size());
@@ -208,6 +231,7 @@ public:
       } catch(std::exception e) {
         std::cout << "EX2=" << e.what() << std::endl;
       }
+      */
     } else if(var.which() == bytecode_t) {
       Bytecode& bc = boost::get<Bytecode>(var);
       lua_load(L,(lua_Reader)lua_read,(void *)&bc.data,"func","b");
@@ -227,14 +251,17 @@ public:
       set(lua_tonumber(L,index));
     } else if(lua_isstring(L,index)) {
       set(lua_tostring(L,index));
-    } else if(lua_isuserdata(L,index) && luaL_checkudata(L,index,future_metatable_name) != nullptr) {
+    } else if(cmp_meta(L,index,future_metatable_name)) {
       var = *(future_type *)lua_touserdata(L,index);
+    } else if(cmp_meta(L,index,table_metatable_name)) {
+      var = *(table_ptr *)lua_touserdata(L,index);
     } else if(lua_istable(L,index)) {
+      HERE;
       try {
         int nn = lua_gettop(L);
         lua_pushvalue(L,index);
         lua_pushnil(L);
-        var = table_ptr(new table_type());
+        var = table_ptr(new table_inner());
         table_ptr& table = boost::get<table_ptr>(var);
         while(lua_next(L,-2) != 0) {
           lua_pushvalue(L,-2);
@@ -243,7 +270,7 @@ public:
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
-              (*table)[key] = h;
+              (table->t)[key] = h;
               //STACK;
               if(key == 0) {
                 std::cout << "pack0:PRINT=" << (*this) << std::endl;
@@ -261,7 +288,7 @@ public:
             Holder h;
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
-              (*table)[key] = h;
+              (table->t)[key] = h;
             } else {
               std::cout << "pack1:PRINT=" << (*this) << std::endl;
               abort();
@@ -288,8 +315,11 @@ public:
     } else if(lua_isnil(L,index)) {
       Empty e;
       var = e;
+    } else if(lua_isuserdata(L,index)) {
+      std::cout << "Can't pack unknown user data!" << std::endl;
     } else {
-      std::cerr << "Can't pack value! " << lua_type(L,index) << std::endl;
+      int t = lua_type(L,index);
+      std::cerr << "Can't pack value! " << t << std::endl;
       //abort();
     }
   }
@@ -326,6 +356,8 @@ private:
     lua_setglobal(L,"unwrap");
     lua_pushcfunction(L,isfuture);
     lua_setglobal(L,"isfuture");
+    lua_pushcfunction(L,istable);
+    lua_setglobal(L,"istable");
     lua_pushcfunction(L,hpx_reg);
     lua_setglobal(L,"HPX_PLAIN_ACTION");
     lua_pushcfunction(L,hpx_run);

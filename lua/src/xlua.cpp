@@ -37,6 +37,32 @@ const char *locality_metatable_name = "hpx_locality";
 const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
   guard_metatable_name, locality_metatable_name,0};
 
+
+bool cmp_meta(lua_State *L,int index,const char *name) {
+  if(lua_isnil(L,index))
+    return false;
+  if(!lua_isuserdata(L,index))
+    return false;
+  int ss1 = lua_gettop(L);
+  lua_getfield(L,index,"Name");
+  int ss2 = lua_gettop(L);
+  if(ss1+1 != ss2)
+    return false;
+  if(!lua_iscfunction(L,-1))
+    return false;
+  lua_CFunction f = lua_tocfunction(L,-1);
+  lua_pop(L,1);
+  if(f == nullptr)
+    return false;
+  (*f)(L);
+  if(lua_isstring(L,-1)) {
+    std::string nm = lua_tostring(L,-1);
+    lua_pop(L,1);
+    return nm == name;
+  }
+  return false;
+}
+
 guard_type global_guarded{new Guard()};
 
 std::ostream& operator<<(std::ostream& out,const key_type& kt) {
@@ -60,8 +86,8 @@ std::ostream& operator<<(std::ostream& out,const Holder& holder) {
       {
         table_ptr t = boost::get<table_ptr>(holder.var);
         out << "{";
-        for(auto i=t->begin(); i != t->end(); ++i) {
-          if(i != t->begin()) out << ", ";
+        for(auto i=t->t.begin(); i != t->t.end(); ++i) {
+          if(i != t->t.begin()) out << ", ";
           out << i->first << ":" << i->second;
         }
         out << "}";
@@ -228,7 +254,7 @@ int new_future(lua_State *L) {
 }
 
 int hpx_future_clean(lua_State *L) {
-    if(luaL_checkudata(L,-1,future_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,future_metatable_name)) {
       future_type *fnc = (future_type *)lua_touserdata(L,-1);
       dtor(fnc);
     }
@@ -236,7 +262,7 @@ int hpx_future_clean(lua_State *L) {
 }
 
 int hpx_future_get(lua_State *L) {
-  if(luaL_checkudata(L,-1,future_metatable_name) != nullptr) {
+  if(cmp_meta(L,-1,future_metatable_name)) {
     future_type *fnc = (future_type *)lua_touserdata(L,-1);
     ptr_type result = fnc->get();
     for(auto i=result->begin();i!=result->end();++i) {
@@ -266,7 +292,7 @@ int luax_wait_all(lua_State *L) {
         lua_pushvalue(L,-2);
         n++;
         const int ix = -2;
-        if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
+        if(!cmp_meta(L,ix,future_metatable_name)) {
           luai_writestringerror("Argument %d to wait_all() is not a future ",n);
           return 0;
         }
@@ -276,7 +302,7 @@ int luax_wait_all(lua_State *L) {
       }
       if(lua_gettop(L) > top)
         lua_pop(L,lua_gettop(L)-top);
-    } else if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+    } else if(cmp_meta(L,i,future_metatable_name)) {
       future_type *fnc = (future_type *)lua_touserdata(L,i);
       v.push_back(*fnc);
     }
@@ -293,12 +319,12 @@ int luax_wait_all(lua_State *L) {
 
 ptr_type luax_when_all2(std::vector<future_type> result) {
   ptr_type pt{new std::vector<Holder>};
-  table_ptr t{new table_type()};
+  table_ptr t{new table_inner()};
   int n = 1;
   for(auto i=result.begin();i != result.end();++i) {
     Holder h;
     h.var = *i;
-    (*t)[n++] = h;
+    (t->t)[n++] = h;
   }
   Holder h;
   h.var = t;
@@ -320,7 +346,7 @@ int luax_when_all(lua_State *L) {
         lua_pushvalue(L,-2);
         n++;
         const int ix = -2;
-        if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
+        if(!cmp_meta(L,ix,future_metatable_name)) {
           luai_writestringerror("Argument %d to wait_all() is not a future ",n);
           return 0;
         }
@@ -330,7 +356,7 @@ int luax_when_all(lua_State *L) {
       }
       if(lua_gettop(L) > top)
         lua_pop(L,lua_gettop(L)-top);
-    } else if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+    } else if(cmp_meta(L,i,future_metatable_name)) {
       future_type *fnc = (future_type *)lua_touserdata(L,i);
       v.push_back(*fnc);
     }
@@ -351,13 +377,13 @@ ptr_type get_when_any_result(hpx::when_any_result< std::vector< future_type > > 
   //Holder h;
   //h.var = result.index;
   //p->push_back(h);
-  table_ptr t{new table_type()};
-  (*t)["index"].var = result.index+1;
-  table_ptr t2{new table_type()};
+  table_ptr t{new table_inner()};
+  (t->t)["index"].var = result.index+1;
+  table_ptr t2{new table_inner()};
   for(int i=0;i<result.futures.size();i++) {
-    (*t2)[i+1].var = result.futures[i];
+    (t2->t)[i+1].var = result.futures[i];
   }
-  (*t)["futures"].var = t2;
+  (t->t)["futures"].var = t2;
   Holder h;
   h.var = t;
   p->push_back(h);
@@ -377,7 +403,7 @@ int luax_when_any(lua_State *L) {
         lua_pushvalue(L,-2);
         n++;
         const int ix = -2;
-        if(luaL_checkudata(L,ix,future_metatable_name) == nullptr) {
+        if(!cmp_meta(L,ix,future_metatable_name)) {
           luai_writestringerror("Argument %d to when_any() is not a future ",n);
           return 0;
         }
@@ -387,7 +413,7 @@ int luax_when_any(lua_State *L) {
       }
       if(lua_gettop(L) > top)
         lua_pop(L,lua_gettop(L)-top);
-    } else if(luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+    } else if(cmp_meta(L,i,future_metatable_name)) {
       future_type *fnc = (future_type *)lua_touserdata(L,i);
       v.push_back(*fnc);
     }
@@ -420,7 +446,7 @@ std::string getfunc(lua_State *L,int index) {
 }
 
 int hpx_future_then(lua_State *L) {
-  if(luaL_checkudata(L,1,future_metatable_name) != nullptr) {
+  if(cmp_meta(L,1,future_metatable_name)) {
     future_type *fnc = (future_type *)lua_touserdata(L,1);
     
     CHECK_STRING(2,"Future:Then()")
@@ -447,10 +473,16 @@ int hpx_future_then(lua_State *L) {
   return 1;
 }
 
+int future_name(lua_State *L) {
+  lua_pushstring(L,future_metatable_name);
+  return 1;
+}
+
 int open_future(lua_State *L) {
     static const struct luaL_Reg future_meta_funcs [] = {
         {"Get",&hpx_future_get},
         {"Then",&hpx_future_then},
+        {"Name",future_name},
         {NULL,NULL},
     };
 
@@ -468,6 +500,7 @@ int open_future(lua_State *L) {
     lua_pushstring(L,"__gc");
     lua_pushcfunction(L,hpx_future_clean);
     lua_settable(L,-3);
+
     lua_pop(L,1);
 
     return 1;
@@ -484,7 +517,7 @@ int new_guard(lua_State *L) {
 }
 
 int hpx_guard_clean(lua_State *L) {
-    if(luaL_checkudata(L,-1,guard_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,guard_metatable_name)) {
       guard_type *fnc = (guard_type *)lua_touserdata(L,-1);
       dtor(fnc);
     }
@@ -510,6 +543,10 @@ int open_guard(lua_State *L) {
     lua_pushstring(L,"__gc");
     lua_pushcfunction(L,hpx_guard_clean);
     lua_settable(L,-3);
+
+    lua_pushstring(L,"name");
+    lua_pushstring(L,guard_metatable_name);
+    lua_settable(L,-3);
     lua_pop(L,1);
 
     return 1;
@@ -525,7 +562,7 @@ int new_table_iter(lua_State *L) {
 }
 
 int hpx_table_iter_clean(lua_State *L) {
-    if(luaL_checkudata(L,-1,table_iter_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,table_iter_metatable_name)) {
       table_iter_type *fnc = (table_iter_type *)lua_touserdata(L,-1);
       dtor(fnc);
     }
@@ -533,7 +570,7 @@ int hpx_table_iter_clean(lua_State *L) {
 }
 
 int hpx_table_iter_call(lua_State *L) {
-  if(luaL_checkudata(L,1,table_iter_metatable_name) != nullptr) {
+  if(true) {//cmp_meta(L,1,table_iter_metatable_name)) {
     table_iter_type *fnc = (table_iter_type *)lua_touserdata(L,1);
     if(fnc->ready && fnc->begin != fnc->end) {
 
@@ -577,6 +614,12 @@ int open_table_iter(lua_State *L) {
     lua_pushcfunction(L,hpx_table_iter_clean);
     lua_settable(L,-3);
 
+    /*
+    lua_pushstring(L,"name");
+    lua_pushstring(L,table_metatable_name);
+    lua_settable(L,-3);
+    */
+
     lua_pushstring(L,"__call");
     lua_pushcfunction(L,hpx_table_iter_call);
     lua_settable(L,-3);
@@ -591,12 +634,12 @@ int new_table(lua_State *L) {
   size_t nbytes = sizeof(table_ptr);
   char *table = (char *)lua_newuserdata(L,nbytes);
   luaL_setmetatable(L,table_metatable_name);
-  new (table) table_ptr(new table_type());
+  new (table) table_ptr(new table_inner());
   return 1;
 }
 
 int hpx_table_clean(lua_State *L) {
-    if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,table_metatable_name)) {
       table_ptr *fnc = (table_ptr *)lua_touserdata(L,-1);
       dtor(fnc);
     }
@@ -604,12 +647,29 @@ int hpx_table_clean(lua_State *L) {
 }
 
 int table_len(lua_State *L) {
-    if(luaL_checkudata(L,-1,table_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,table_metatable_name)) {
       table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,-1);
       table_ptr& fnc = *fnc_p;
-      int sz = 0;
+      int sz = fnc->size;
+      /*
+      const char *szkey = "__size__";
+      auto sz_ptr = fnc->t.find(szkey);
+      if(sz_ptr != fnc->t.end())
+        sz = boost::get<double>(sz_ptr->second.var);
+      */
+      /*
+      bool save = false;
       for(;fnc->find(sz+1) != fnc->end();++sz)
-        ;
+        save = true;
+      if(sz_ptr == fnc->end()) {
+        Holder h;
+        h.var = sz;
+        (*fnc)[szkey] = h;
+      } else {
+        sz_ptr->second.var = sz;
+      }
+      //sz_ptr->second.var = sz;
+      */
       lua_pushnumber(L,sz);
     }
     return 1;
@@ -627,30 +687,30 @@ int table_clos_iter(lua_State *L) {
   table_ptr& fnc = *fnc_p;
   lua_pop(L,lua_gettop(L));
   lua_pushnumber(L,next_index);
-  auto ptr = fnc->find(next_index);
-  if(ptr == fnc->end())
+  auto ptr = fnc->t.find(next_index);
+  if(ptr == fnc->t.end())
     return 0;
-  Holder h = (*fnc)[next_index];
+  Holder h = (fnc->t)[next_index];
   h.unpack(L);
   return 2;
 }
 
 int table_pairs(lua_State *L) {
-  if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+  if(cmp_meta(L,1,table_metatable_name)) {
     table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,-1);
     table_ptr& fnc = *fnc_p;
     new_table_iter(L);
     table_iter_type *fc =
       (table_iter_type *)lua_touserdata(L,-1);
     fc->ready = true;
-    fc->begin = fnc->begin();
-    fc->end   = fnc->end();
+    fc->begin = fnc->t.begin();
+    fc->end   = fnc->t.end();
   }
   return 1;
 }
 
 int table_ipairs(lua_State *L) {
-  if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+  if(cmp_meta(L,1,table_metatable_name)) {
     lua_pushcclosure(L,&table_clos_iter,1);
   }
   return 1;
@@ -665,13 +725,13 @@ void push_key(lua_State *L,const key_type& kt) {
 }
 
 int hpx_table_find(lua_State *L) {
-  if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+  if(cmp_meta(L,1,table_metatable_name)) {
     table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
     table_ptr fnc = *fnc_p;
     if(lua_isnil(L,2)) {
       lua_pop(L,lua_gettop(L));
-      auto f = fnc->begin();
-      if(f != fnc->end()) {
+      auto f = fnc->t.begin();
+      if(f != fnc->t.end()) {
         push_key(L,f->first);
         Holder h = f->second;
         h.unpack(L);
@@ -682,10 +742,10 @@ int hpx_table_find(lua_State *L) {
     } else if(lua_isnumber(L,2)) {
       key_type k = lua_tonumber(L,2);
       lua_pop(L,lua_gettop(L));
-      auto f = fnc->find(k);
-      if(f != fnc->end())
+      auto f = fnc->t.find(k);
+      if(f != fnc->t.end())
         ++f;
-      if(f != fnc->end()) {
+      if(f != fnc->t.end()) {
         push_key(L,f->first);
         Holder h = f->second;
         h.unpack(L);
@@ -696,10 +756,10 @@ int hpx_table_find(lua_State *L) {
     } else if(lua_isstring(L,2)) {
       key_type k = lua_tostring(L,2);
       lua_pop(L,lua_gettop(L));
-      auto f = fnc->find(k);
-      if(f != fnc->end())
+      auto f = fnc->t.find(k);
+      if(f != fnc->t.end())
         ++f;
-      if(f != fnc->end()) {
+      if(f != fnc->t.end()) {
         push_key(L,f->first);
         Holder h = f->second;
         h.unpack(L);
@@ -714,8 +774,19 @@ int hpx_table_find(lua_State *L) {
   return 1;
 }
 
+int table_name(lua_State *L) {
+  lua_pushstring(L,table_metatable_name);
+  return 1;
+}
+
 int table_new_index(lua_State *L) {
-    if(luaL_checkudata(L,1,table_metatable_name) != nullptr) {
+    /*
+    if(recurse) {
+      lua_pushstring(L,table_metatable_name);
+      return 1;
+    }
+    */
+    if(true) {//cmp_meta(L,1,table_metatable_name)) {
       table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
       table_ptr& fnc = *fnc_p;
       Holder h;
@@ -723,17 +794,29 @@ int table_new_index(lua_State *L) {
         h.pack(L,3);
         if(lua_isnumber(L,2)) {
           double key = lua_tonumber(L,2);
-          (*fnc)[key] = h;
+          (fnc->t)[key] = h;
+          /*
+          auto sz_ptr = fnc->t.find("__size__");
+          if(sz_ptr != fnc->t.end()) {
+            if(boost::get<double>(sz_ptr->second.var)+1 == key) {
+              sz_ptr->second.var = key;
+            }
+          } else if(key == 1) {
+            (fnc->t)["__size__"].var=1;
+          }
+          */
+          if(key == 1 + fnc->size)
+            fnc->size = key;
         } else {
           std::string key = lua_tostring(L,2);
-          (*fnc)[key] = h;
+          (fnc->t)[key] = h;
         }
         return 0;
       } else {// get
         if(lua_isnumber(L,2)) {
           double key = lua_tonumber(L,2);
-          auto ptr = fnc->find(key);
-          if(ptr == fnc->end())
+          auto ptr = fnc->t.find(key);
+          if(ptr == fnc->t.end())
             return 0;
           h = ptr->second;
         } else {
@@ -743,8 +826,13 @@ int table_new_index(lua_State *L) {
             lua_pushcfunction(L,hpx_table_find);
             return 1;
           }
-          auto ptr = fnc->find(key);
-          if(ptr == fnc->end())
+          if(key == "Name") {
+            lua_pop(L,2);
+            lua_pushcfunction(L,table_name);
+            return 1;
+          }
+          auto ptr = fnc->t.find(key);
+          if(ptr == fnc->t.end())
             return 0;
           h = ptr->second;
         }
@@ -798,6 +886,10 @@ int open_table(lua_State *L) {
 
     lua_pushstring(L,"find");
     lua_pushcfunction(L,hpx_table_find);
+    lua_settable(L,-3);
+
+    lua_pushstring(L,"name");
+    lua_pushstring(L,table_metatable_name);
     lua_settable(L,-3);
 
     lua_pop(L,1);
@@ -865,7 +957,7 @@ int loc_str(lua_State *L) {
   for(int i=1;i<=n;i++) {
     if(lua_isstring(L,i)) {
       msg << lua_tostring(L,i);
-    } else if(lua_isuserdata(L,i) && luaL_checkudata(L,i,locality_metatable_name) != nullptr) {
+    } else if(lua_isuserdata(L,i) && cmp_meta(L,i,locality_metatable_name)) {
       locality_type *loc = (locality_type*)lua_touserdata(L,i);
       msg << *loc;
     } else {
@@ -878,7 +970,7 @@ int loc_str(lua_State *L) {
 }
 
 int hpx_locality_clean(lua_State *L) {
-    if(luaL_checkudata(L,-1,locality_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,locality_metatable_name)) {
       locality_type *fnc = (locality_type *)lua_touserdata(L,-1);
       dtor(fnc);
     }
@@ -1294,12 +1386,23 @@ int luax_run_guarded(lua_State *L) {
 }
 
 int isfuture(lua_State *L) {
-    if(lua_isuserdata(L,-1) && luaL_checkudata(L,-1,future_metatable_name) != nullptr) {
+    if(cmp_meta(L,-1,future_metatable_name)) {
       lua_pop(L,1);
-      lua_pushnumber(L,1);
+      lua_pushboolean(L,1);
     } else {
       lua_pop(L,1);
-      lua_pushnumber(L,0);
+      lua_pushboolean(L,0);
+    }
+    return 1;
+}
+
+int istable(lua_State *L) {
+    if(cmp_meta(L,-1,table_metatable_name)) {
+      lua_pop(L,1);
+      lua_pushboolean(L,1);
+    } else {
+      lua_pop(L,1);
+      lua_pushboolean(L,0);
     }
     return 1;
 }
@@ -1307,7 +1410,7 @@ int isfuture(lua_State *L) {
 int dataflow(lua_State *L) {
 
     locality_type *loc = nullptr;
-    if(lua_isuserdata(L,1) && luaL_checkudata(L,1,locality_metatable_name) != nullptr) {
+    if(lua_isuserdata(L,1) && cmp_meta(L,1,locality_metatable_name)) {
       loc = (locality_type *)lua_touserdata(L,1);
       lua_remove(L,1);
     }
@@ -1340,7 +1443,7 @@ int dataflow(lua_State *L) {
 int async(lua_State *L) {
 
     locality_type *loc = nullptr;
-    if(lua_isuserdata(L,1) && luaL_checkudata(L,1,locality_metatable_name) != nullptr) {
+    if(lua_isuserdata(L,1) && cmp_meta(L,1,locality_metatable_name)) {
       loc = (locality_type *)lua_touserdata(L,1);
       lua_remove(L,1);
     }
@@ -1413,7 +1516,7 @@ int unwrap(lua_State *L) {
     #endif
     int nargs = lua_gettop(L);
     for(int i=1;i<=nargs;i++) {
-      if(lua_isuserdata(L,i) && luaL_checkudata(L,i,future_metatable_name) != nullptr) {
+      if(lua_isuserdata(L,i) && cmp_meta(L,i,future_metatable_name) ) {
         future_type *fc = (future_type *)lua_touserdata(L,i);
         unwrap_future(L,i,*fc);
       }
