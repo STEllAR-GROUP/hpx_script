@@ -264,13 +264,17 @@ int hpx_future_clean(lua_State *L) {
 int hpx_future_get(lua_State *L) {
   if(cmp_meta(L,-1,future_metatable_name)) {
     future_type *fnc = (future_type *)lua_touserdata(L,-1);
+    lua_pop(L,1);
     ptr_type result = fnc->get();
     for(auto i=result->begin();i!=result->end();++i) {
       i->unpack(L);
+      if(cmp_meta(L,-1,future_metatable_name)) {
+        hpx_future_get(L);
+      }
     }
     // Need to make sure something is returned
     if(result->size()==0)
-      lua_pushnil(L);
+      return 0;
   }
   return 1;
 }
