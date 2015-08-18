@@ -40,6 +40,7 @@ std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line
 class Holder;
 std::ostream& operator<<(std::ostream&,const Holder&);
 
+int timer(lua_State *L);
 int call(lua_State *L);
 int dataflow(lua_State *L);
 int make_ready_future(lua_State *L);
@@ -340,6 +341,8 @@ private:
   public:
   Lua() : busy(true), L(luaL_newstate()) {
     luaL_openlibs(L);
+    lua_pushcfunction(L,timer);
+    lua_setglobal(L,"timer");
     lua_pushcfunction(L,make_ready_future);
     lua_setglobal(L,"make_ready_future");
     lua_pushcfunction(L,dataflow);

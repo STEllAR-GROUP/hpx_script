@@ -37,6 +37,14 @@ const char *locality_metatable_name = "hpx_locality";
 const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
   guard_metatable_name, locality_metatable_name,0};
 
+auto ts = std::chrono::high_resolution_clock::now();
+
+int timer(lua_State *L) {
+  auto te = std::chrono::high_resolution_clock::now();
+  double t = std::chrono::duration<double,std::milli>(te-ts).count()*1e-3;
+  lua_pushnumber(L,t);
+  return 1;
+}
 
 bool cmp_meta(lua_State *L,int index,const char *name) {
   if(lua_isnil(L,index))
@@ -714,9 +722,7 @@ int table_pairs(lua_State *L) {
 }
 
 int table_ipairs(lua_State *L) {
-  if(cmp_meta(L,1,table_metatable_name)) {
-    lua_pushcclosure(L,&table_clos_iter,1);
-  }
+  lua_pushcclosure(L,&table_clos_iter,1);
   return 1;
 }
 
@@ -784,67 +790,49 @@ int table_name(lua_State *L) {
 }
 
 int table_new_index(lua_State *L) {
-    /*
-    if(recurse) {
-      lua_pushstring(L,table_metatable_name);
-      return 1;
+  table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
+  table_ptr& fnc = *fnc_p;
+  Holder h;
+  if(lua_gettop(L)==3) { // set
+    h.pack(L,3);
+    if(lua_isnumber(L,2)) {
+      double key = lua_tonumber(L,2);
+      (fnc->t)[key] = h;
+      if(key == 1 + fnc->size)
+        fnc->size = key;
+    } else {
+      std::string key = lua_tostring(L,2);
+      (fnc->t)[key] = h;
     }
-    */
-    if(true) {//cmp_meta(L,1,table_metatable_name)) {
-      table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
-      table_ptr& fnc = *fnc_p;
-      Holder h;
-      if(lua_gettop(L)==3) { // set
-        h.pack(L,3);
-        if(lua_isnumber(L,2)) {
-          double key = lua_tonumber(L,2);
-          (fnc->t)[key] = h;
-          /*
-          auto sz_ptr = fnc->t.find("__size__");
-          if(sz_ptr != fnc->t.end()) {
-            if(boost::get<double>(sz_ptr->second.var)+1 == key) {
-              sz_ptr->second.var = key;
-            }
-          } else if(key == 1) {
-            (fnc->t)["__size__"].var=1;
-          }
-          */
-          if(key == 1 + fnc->size)
-            fnc->size = key;
-        } else {
-          std::string key = lua_tostring(L,2);
-          (fnc->t)[key] = h;
-        }
+    return 0;
+  } else {// get
+    if(lua_isnumber(L,2)) {
+      double key = lua_tonumber(L,2);
+      auto ptr = fnc->t.find(key);
+      if(ptr == fnc->t.end())
         return 0;
-      } else {// get
-        if(lua_isnumber(L,2)) {
-          double key = lua_tonumber(L,2);
-          auto ptr = fnc->t.find(key);
-          if(ptr == fnc->t.end())
-            return 0;
-          h = ptr->second;
-        } else {
-          std::string key = lua_tostring(L,2);
-          if(key == "find") {
-            lua_pop(L,2);
-            lua_pushcfunction(L,hpx_table_find);
-            return 1;
-          }
-          if(key == "Name") {
-            lua_pop(L,2);
-            lua_pushcfunction(L,table_name);
-            return 1;
-          }
-          auto ptr = fnc->t.find(key);
-          if(ptr == fnc->t.end())
-            return 0;
-          h = ptr->second;
-        }
+      h = ptr->second;
+    } else {
+      std::string key = lua_tostring(L,2);
+      if(key == "find") {
         lua_pop(L,2);
-        h.unpack(L);
+        lua_pushcfunction(L,hpx_table_find);
+        return 1;
       }
+      if(key == "Name") {
+        lua_pop(L,2);
+        lua_pushcfunction(L,table_name);
+        return 1;
+      }
+      auto ptr = fnc->t.find(key);
+      if(ptr == fnc->t.end())
+        return 0;
+      h = ptr->second;
     }
-    return 1;
+    lua_pop(L,2);
+    h.unpack(L);
+  }
+  return 1;
 }
 
 int open_table(lua_State *L) {
@@ -961,7 +949,7 @@ int loc_str(lua_State *L) {
   for(int i=1;i<=n;i++) {
     if(lua_isstring(L,i)) {
       msg << lua_tostring(L,i);
-    } else if(lua_isuserdata(L,i) && cmp_meta(L,i,locality_metatable_name)) {
+    } else if(cmp_meta(L,i,locality_metatable_name)) {
       locality_type *loc = (locality_type*)lua_touserdata(L,i);
       msg << *loc;
     } else {
@@ -1431,7 +1419,7 @@ int islocality(lua_State *L) {
 int dataflow(lua_State *L) {
 
     locality_type *loc = nullptr;
-    if(lua_isuserdata(L,1) && cmp_meta(L,1,locality_metatable_name)) {
+    if(cmp_meta(L,1,locality_metatable_name)) {
       loc = (locality_type *)lua_touserdata(L,1);
       lua_remove(L,1);
     }
@@ -1464,7 +1452,7 @@ int dataflow(lua_State *L) {
 int async(lua_State *L) {
 
     locality_type *loc = nullptr;
-    if(lua_isuserdata(L,1) && cmp_meta(L,1,locality_metatable_name)) {
+    if(cmp_meta(L,1,locality_metatable_name)) {
       loc = (locality_type *)lua_touserdata(L,1);
       lua_remove(L,1);
     }
@@ -1511,33 +1499,9 @@ void unwrap_future(lua_State *L,int index,future_type& f) {
 }
 
 int unwrap(lua_State *L) {
-
-    #if 0
-    // Package up the arguments
-    ptr_type args(new std::vector<Holder>());
-    for(int i=2;i<=nargs;i++) {
-      Holder h;
-      h.pack(L,i);
-      h.push(args);
-    }
-    
-    CHECK_STRING(1,"unwrap")
-    bool is_bytecode;
-    string_ptr fname{new std::string};
-    *fname = getfunc(L,1,is_bytecode);
-
-    future_type f =
-      luax_dataflow(fname,args);
-
-    new_future(L);
-    future_type *fc =
-      (future_type *)lua_touserdata(L,-1);
-    *fc = f;
-    return 1;
-    #endif
     int nargs = lua_gettop(L);
     for(int i=1;i<=nargs;i++) {
-      if(lua_isuserdata(L,i) && cmp_meta(L,i,future_metatable_name) ) {
+      if(cmp_meta(L,i,future_metatable_name) ) {
         future_type *fc = (future_type *)lua_touserdata(L,i);
         unwrap_future(L,i,*fc);
       }
