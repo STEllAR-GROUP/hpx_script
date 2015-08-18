@@ -1,4 +1,5 @@
 #include "xlua.hpp"
+#include "xlua_prototypes.hpp"
 #include <hpx/lcos/broadcast.hpp>
 
 const int max_output_args = 10;
@@ -10,6 +11,230 @@ const int max_output_args = 10;
   }
 
 namespace hpx {
+
+const char *table_metatable_name = "table";
+const char *table_iter_metatable_name = "table_iter";
+const char *future_metatable_name = "hpx_future";
+const char *guard_metatable_name = "hpx_guard";
+const char *locality_metatable_name = "hpx_locality";
+
+const char *lua_read(lua_State *L,void *data,size_t *size);
+int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
+bool cmp_meta(lua_State *L,int index,const char *meta_name);
+
+  Lua::Lua() : busy(true), L(luaL_newstate()) {
+    luaL_openlibs(L);
+    lua_pushcfunction(L,timer);
+    lua_setglobal(L,"timer");
+    lua_pushcfunction(L,make_ready_future);
+    lua_setglobal(L,"make_ready_future");
+    lua_pushcfunction(L,dataflow);
+    lua_setglobal(L,"dataflow");
+    lua_pushcfunction(L,call);
+    lua_setglobal(L,"call");
+    lua_pushcfunction(L,async);
+    lua_setglobal(L,"async");
+    lua_pushcfunction(L,luax_wait_all);
+    lua_setglobal(L,"wait_all");
+    lua_pushcfunction(L,luax_when_all);
+    lua_setglobal(L,"when_all");
+    lua_pushcfunction(L,luax_when_any);
+    lua_setglobal(L,"when_any");
+    lua_pushcfunction(L,unwrap);
+    lua_setglobal(L,"unwrap");
+    lua_pushcfunction(L,isfuture);
+    lua_setglobal(L,"isfuture");
+    lua_pushcfunction(L,islocality);
+    lua_setglobal(L,"islocality");
+    lua_pushcfunction(L,istable);
+    lua_setglobal(L,"istable");
+    lua_pushcfunction(L,hpx_reg);
+    lua_setglobal(L,"HPX_PLAIN_ACTION");
+    lua_pushcfunction(L,hpx_run);
+    lua_setglobal(L,"hpx_run");
+    lua_pushcfunction(L,luax_run_guarded);
+    lua_setglobal(L,"run_guarded");
+    lua_pushcfunction(L,find_here);
+    lua_setglobal(L,"find_here");
+    lua_pushcfunction(L,all_localities);
+    lua_setglobal(L,"find_all_localities");
+    lua_pushcfunction(L,remote_localities);
+    lua_setglobal(L,"find_remote_localities");
+    lua_pushcfunction(L,root_locality);
+    lua_setglobal(L,"find_root_locality");
+
+    open_table(L);
+    luaL_requiref(L, "table_t", &open_table, 1);
+    open_table_iter(L);
+    luaL_requiref(L, "table_iter_t", &open_table_iter, 1);
+    open_future(L);
+    luaL_requiref(L, "future", &open_future, 1);
+    open_guard(L);
+    luaL_requiref(L, "guard",&open_guard, 1);
+    open_locality(L);
+    luaL_requiref(L, "locality",&open_locality, 1);
+    lua_pop(L,lua_gettop(L));
+    for(auto i=function_registry.begin();i != function_registry.end();++i) {
+      // Insert into table
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&i->second,i->first.c_str(),"b") != 0) {
+        std::cout << "function " << i->first << " size=" << i->second.size() << std::endl;
+        SHOW_ERROR(L);
+      } else {
+        lua_setglobal(L,i->first.c_str());
+      }
+    }
+    /*
+    luaL_dostring(L,
+"function __hpx_nextvalue(obj)"
+"  local t = setmetatable({object=obj},{"
+"    __call = function(self,v,k)"
+"      local nk = self.obj.find(k)"
+"      if nk != nil then"
+"        return nk,self.obj[nk]"
+"      end"
+"    end"
+"  })"
+"  return t"
+"end");
+*/
+    busy = false;
+  }
+  void Holder::unpack(lua_State *L) {
+    if(var.which() == num_t) {
+      lua_pushnumber(L,boost::get<double>(var));
+    } else if(var.which() == str_t) {
+      lua_pushstring(L,boost::get<std::string>(var).c_str());
+    } else if(var.which() == ptr_t) {
+      auto ptr = boost::get<ptr_type >(var);
+      for(auto i=ptr->begin();i != ptr->end();++i)
+        i->unpack(L);
+    } else if(var.which() == fut_t) {
+      // Shouldn't ever happen
+      //std::cout << "ERROR: Unrealized future in arg list" << std::endl;
+      //abort();
+      new_future(L);
+      future_type *fc = (future_type *)lua_touserdata(L,-1);
+      *fc = boost::get<future_type>(var);
+    } else if(var.which() == table_t) {
+      new_table(L);
+      table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
+      *tp = boost::get<table_ptr>(var);
+      /*
+      try {
+        table_ptr& table = boost::get<table_ptr>(var);
+        lua_createtable(L,0,table->size());
+        for(auto i=table->begin();i != table->end();++i) {
+          const int which = i->first.which();
+          if(which == 0) { // number
+            double d = boost::get<double>(i->first);
+            lua_pushnumber(L,d);
+            if(d == 0) {
+              std::cout << "unpack:PRINT=" << (*this) << std::endl;
+              abort();
+            }
+          } else if(which == 1) { // string
+            std::string str = boost::get<std::string>(i->first);
+            lua_pushstring(L,str.c_str());
+          } else {
+            std::cout << "ERROR: Unknown key type: " << which << std::endl;
+            abort();
+          }
+          i->second.unpack(L);
+          lua_settable(L,-3);
+        }
+      } catch(std::exception e) {
+        std::cout << "EX2=" << e.what() << std::endl;
+      }
+      */
+    } else if(var.which() == bytecode_t) {
+      Bytecode& bc = boost::get<Bytecode>(var);
+      lua_load(L,(lua_Reader)lua_read,(void *)&bc.data,"func","b");
+    } else if(var.which() == empty_t) {
+      lua_pushnil(L);
+    } else {
+      std::cout << "ERROR: Unknown type: " << var.which() << std::endl;
+      abort();
+    }
+  }
+
+  void Holder::pack(lua_State *L,int index) {
+    if(lua_isnumber(L,index)) {
+      set(lua_tonumber(L,index));
+    } else if(lua_isstring(L,index)) {
+      set(lua_tostring(L,index));
+    } else if(cmp_meta(L,index,future_metatable_name)) {
+      var = *(future_type *)lua_touserdata(L,index);
+    } else if(cmp_meta(L,index,table_metatable_name)) {
+      var = *(table_ptr *)lua_touserdata(L,index);
+    } else if(lua_istable(L,index)) {
+      try {
+        int nn = lua_gettop(L);
+        lua_pushvalue(L,index);
+        lua_pushnil(L);
+        var = table_ptr(new table_inner());
+        table_ptr& table = boost::get<table_ptr>(var);
+        while(lua_next(L,-2) != 0) {
+          lua_pushvalue(L,-2);
+          if(lua_isnumber(L,-1)) {
+            double key = lua_tonumber(L,-1);
+            if(key==table->size+1)
+              table->size = key;
+            Holder h;
+            h.pack(L,-2);
+            if(h.var.which() != empty_t) {
+              (table->t)[key] = h;
+              //STACK;
+              if(key == 0) {
+                std::cout << "pack0:PRINT=" << (*this) << std::endl;
+                abort();
+              }
+            } else {
+              std::cout << "pack1:PRINT=" << (*this) << std::endl;
+              abort();
+            }
+          } else if(lua_isstring(L,-1)) {
+            const char *keys = lua_tostring(L,-1);
+            if(keys == nullptr)
+              continue;
+            std::string key{keys};
+            Holder h;
+            h.pack(L,-2);
+            if(h.var.which() != empty_t) {
+              (table->t)[key] = h;
+            } else {
+              std::cout << "pack1:PRINT=" << (*this) << std::endl;
+              abort();
+            }
+          } else {
+            std::cerr << "Can't pack key value!" << lua_type(L,-1) << std::endl;
+            abort();
+          }
+          lua_pop(L,2);
+        }
+        if(lua_gettop(L) > nn)
+          lua_pop(L,lua_gettop(L)-nn);
+        //std::cout << "pack:PRINT=" << (*this) << std::endl;
+      } catch(std::exception e) {
+        std::cout << "EX=" << e.what() << std::endl;
+      }
+    } else if(lua_isfunction(L,index)) {
+      lua_pushvalue(L,index);
+      assert(lua_isfunction(L,-1));
+      Bytecode b;
+      lua_dump(L,(lua_Writer)lua_write,&b.data);
+      var = b;
+      lua_pop(L,1);
+    } else if(lua_isnil(L,index)) {
+      Empty e;
+      var = e;
+    } else if(lua_isuserdata(L,index)) {
+      std::cout << "Can't pack unknown user data!" << std::endl;
+    } else {
+      int t = lua_type(L,index);
+      std::cerr << "Can't pack value! " << t << std::endl;
+      //abort();
+    }
+  }
 
 inline bool is_bytecode(const std::string& s) {
   return s.size() > 4 && s[0] == 27 && s[1] == 'L' && s[2] == 'u' && s[3] == 'a';
@@ -28,12 +253,6 @@ LuaEnv::~LuaEnv() {
   ptr->busy = false;
   set_lua_ptr(ptr);
 }
-
-const char *table_metatable_name = "table";
-const char *table_iter_metatable_name = "table_iter";
-const char *future_metatable_name = "hpx_future";
-const char *guard_metatable_name = "hpx_guard";
-const char *locality_metatable_name = "hpx_locality";
 const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
   guard_metatable_name, locality_metatable_name,0};
 
@@ -1560,9 +1779,6 @@ int hpx_reg(lua_State *L) {
 	return 1;
 }
 
-// TODO: Get rid of this constant.
-const char *alt_name = "xrun";
-
 void hpx_srun(string_ptr fname,ptr_type gdata,guard_type *gv,int ng) {
     LuaEnv lenv;
     lua_State *L = lenv.get_state();
@@ -1608,14 +1824,11 @@ int hpx_srun(lua_State *L,std::string& fname,ptr_type gdata) {
   }
 
   std::string bytecode = function_registry[fname];
-  if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,alt_name,"b") != 0) {
+  if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,0,"b") != 0) {
     std::cout << "Error in function: " << fname << " size=" << bytecode.size() << std::endl;
     SHOW_ERROR(L);
     return 0;
   }
-
-  lua_setglobal(L,alt_name);
-  lua_getglobal(L,alt_name);
 
   if(!lua_isfunction(L,-1)) {
     std::cout << "Failed to load byte code for " << fname << std::endl;

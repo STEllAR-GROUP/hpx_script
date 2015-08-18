@@ -27,13 +27,22 @@ if(HPX_FOUND)
   include_directories(.)
 
 
+  add_hpx_library(xlua
+    SOURCES xlua.cpp
+    HEADERS xlua.hpp
+  )
+
   add_hpx_executable(xlua
     ESSENTIAL
-    SOURCES lua.cpp xlua.cpp)
+    SOURCES lua.cpp
+    DEPENDENCIES xlua_lib
+    )
 
   add_hpx_executable(hello
     ESSENTIAL
-    SOURCES examples/hello.cpp xlua.cpp)
+    SOURCES examples/hello.cpp 
+    DEPENDENCIES xlua_lib
+    )
 
   target_link_libraries(xlua_exe lua readline)
   target_link_libraries(hello_exe lua)
