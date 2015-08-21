@@ -24,8 +24,16 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
 
   Lua::Lua() : busy(true), L(luaL_newstate()) {
     luaL_openlibs(L);
-    lua_pushcfunction(L,timer);
-    lua_setglobal(L,"timer");
+    lua_pushcfunction(L,xlua_stop);
+    lua_setglobal(L,"stop");
+    lua_pushcfunction(L,xlua_start);
+    lua_setglobal(L,"start");
+    lua_pushcfunction(L,xlua_get_value);
+    lua_setglobal(L,"get_value");
+    lua_pushcfunction(L,xlua_get_counter);
+    lua_setglobal(L,"get_counter");
+    lua_pushcfunction(L,discover);
+    lua_setglobal(L,"discover_counter_types");
     lua_pushcfunction(L,make_ready_future);
     lua_setglobal(L,"make_ready_future");
     lua_pushcfunction(L,dataflow);
@@ -255,15 +263,6 @@ LuaEnv::~LuaEnv() {
 }
 const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
   guard_metatable_name, locality_metatable_name,0};
-
-auto ts = std::chrono::high_resolution_clock::now();
-
-int timer(lua_State *L) {
-  auto te = std::chrono::high_resolution_clock::now();
-  double t = std::chrono::duration<double,std::milli>(te-ts).count()*1e-3;
-  lua_pushnumber(L,t);
-  return 1;
-}
 
 bool cmp_meta(lua_State *L,int index,const char *name) {
   if(lua_isnil(L,index))
@@ -868,6 +867,22 @@ int new_table(lua_State *L) {
   new (table) table_ptr(new table_inner());
   return 1;
 }
+int linspace(lua_State *L) {
+  double lo = lua_tonumber(L,1);
+  double hi = lua_tonumber(L,2);
+  double sz = lua_tonumber(L,3);
+  size_t nbytes = sizeof(table_ptr);
+  char *table = (char *)lua_newuserdata(L,nbytes);
+  luaL_setmetatable(L,table_metatable_name);
+  new (table) table_ptr(new table_inner());
+  table_ptr& t = *(table_ptr*)table;
+  double delta = (hi-lo)/(sz-1);
+  for(int i=1;i<=sz;i++) {
+    (t->t)[i].var = lo + (i-1)*delta;
+  }
+  t->size=sz;
+  return 1;
+}
 
 int hpx_table_clean(lua_State *L) {
     if(cmp_meta(L,-1,table_metatable_name)) {
@@ -1062,6 +1077,7 @@ int open_table(lua_State *L) {
 
     static const struct luaL_Reg table_funcs [] = {
         {"new", &new_table},
+        {"linspace", &linspace},
         {NULL, NULL}
     };
 

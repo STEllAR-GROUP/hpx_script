@@ -4,6 +4,12 @@
 #include "xlua.hpp"
 namespace hpx {
 
+int discover(lua_State *L);
+int xlua_get_counter(lua_State *L);
+int xlua_get_value(lua_State *L);
+int xlua_start(lua_State *L);
+int xlua_stop(lua_State *L);
+
 int call(lua_State *L);
 int dataflow(lua_State *L);
 int make_ready_future(lua_State *L);
@@ -36,6 +42,10 @@ int open_locality(lua_State *L);
 
 int new_future(lua_State *L);
 int new_table(lua_State *L);
+
+const char *lua_read(lua_State *L,void *data,size_t *size);
+int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
+bool cmp_meta(lua_State *L,int index,const char *meta_name);
 }
 
 #endif

@@ -35,6 +35,12 @@
 
 namespace hpx {
 
+extern const char *table_metatable_name;
+extern const char *table_iter_metatable_name;
+extern const char *future_metatable_name;
+extern const char *guard_metatable_name;
+extern const char *locality_metatable_name;
+
 std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line,bool recurse=true);
 
 class Holder;
