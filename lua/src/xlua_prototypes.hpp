@@ -11,6 +11,7 @@ int xlua_start(lua_State *L);
 int xlua_stop(lua_State *L);
 
 int call(lua_State *L);
+int xlua_unwrapped(lua_State *L);
 int dataflow(lua_State *L);
 int make_ready_future(lua_State *L);
 int async(lua_State *L);

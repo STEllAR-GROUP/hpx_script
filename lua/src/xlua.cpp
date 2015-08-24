@@ -38,6 +38,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     lua_setglobal(L,"make_ready_future");
     lua_pushcfunction(L,dataflow);
     lua_setglobal(L,"dataflow");
+    lua_pushcfunction(L,xlua_unwrapped);
+    lua_setglobal(L,"unwrapped");
     lua_pushcfunction(L,call);
     lua_setglobal(L,"call");
     lua_pushcfunction(L,async);
@@ -659,6 +661,8 @@ int luax_when_any(lua_State *L) {
   return 1;
 }
 
+const char *unwrapped_str = "**unwrapped**";
+
 std::string getfunc(lua_State *L,int index) {
   std::string func;
   if(lua_isstring(L,index)) {
@@ -667,7 +671,9 @@ std::string getfunc(lua_State *L,int index) {
     lua_pushvalue(L,index);
     assert(lua_isfunction(L,-1));
     lua_dump(L,(lua_Writer)lua_write,&func);
-
+  } else if(lua_istable(L,index)) {
+    // this is intended to be used with unwrapped
+    func = unwrapped_str;
   } else {
     func = "**error**";
     abort();
@@ -897,25 +903,6 @@ int table_len(lua_State *L) {
       table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,-1);
       table_ptr& fnc = *fnc_p;
       int sz = fnc->size;
-      /*
-      const char *szkey = "__size__";
-      auto sz_ptr = fnc->t.find(szkey);
-      if(sz_ptr != fnc->t.end())
-        sz = boost::get<double>(sz_ptr->second.var);
-      */
-      /*
-      bool save = false;
-      for(;fnc->find(sz+1) != fnc->end();++sz)
-        save = true;
-      if(sz_ptr == fnc->end()) {
-        Holder h;
-        h.var = sz;
-        (*fnc)[szkey] = h;
-      } else {
-        sz_ptr->second.var = sz;
-      }
-      //sz_ptr->second.var = sz;
-      */
       lua_pushnumber(L,sz);
     }
     return 1;
@@ -1301,44 +1288,98 @@ future_type realize_when_all_outputs(ptr_type args) {
   return result.then(hpx::util::unwrapped(boost::bind(realize_when_all_outputs_step2,args,_1)));
 }
 
-int call(lua_State *L) {
-  ptr_type pt{new std::vector<Holder>};
-  std::string func;
-  STACK;
-  if(lua_istable(L,-1)) {
-    // Func
-    lua_pushstring(L,"func");
-    lua_gettable(L,-2);
-    if(lua_isfunction(L,-1)) {
-      STACK;
-      lua_dump(L,(lua_Writer)lua_write,&func);
-      lua_pop(L,1);
-    } else if(lua_isstring(L,-1)) {
-      func = lua_tostring(L,-1);
-      lua_pop(L,1);
-    } else {
-      lua_pushstring(L,"No function supplied to call");
-      return 0;
-    }
-    // Args
-    lua_pushstring(L,"args");
-    lua_gettable(L,-2);
-    if(lua_istable(L,-1)) {
-      lua_pushnil(L);
-      while(lua_next(L,-2) != 0) {
-        lua_pushvalue(L,-2);
-        std::string k = lua_tostring(L,-1);
-        std::string v = lua_tostring(L,-2);
-        std::cout << "call k=" << k << " v=" << v << std::endl;
-        lua_pop(L,2);
-      }
-      lua_pop(L,1);
-    } else {
-      lua_pushstring(L,"args is not a table");
-      return 0;
-    }
+int xlua_unwrapped(lua_State *L) {
+  int n = lua_gettop(L);
+  lua_createtable(L,0,2);
+  lua_pushstring(L,"func");
+  lua_pushvalue(L,1);
+  lua_settable(L,-3);
+  lua_remove(L,1);
+  lua_pushstring(L,"args");
+  lua_createtable(L,n,0);
+  for(int i=1;i<n;i++) {
+    lua_pushnumber(L,i);
+    lua_pushvalue(L,1);
+    lua_settable(L,-3);
+    lua_remove(L,1);
   }
+  lua_settable(L,-3);
   return 1;
+}
+
+int call(lua_State *L) {
+  int argn = 1;
+  if(cmp_meta(L,1,table_metatable_name)) {
+    table_ptr& tp = *(table_ptr *)lua_touserdata(L,-1);
+    Holder hfunc = (tp->t)["func"];
+    hfunc.unpack(L);
+    Holder hargs = (tp->t)["args"];
+    table_ptr tpargs = boost::get<table_ptr>(hargs.var);
+    for(int i=1;i<=tpargs->size;i++) {
+      (tpargs->t)[i].unpack(L);
+      while(cmp_meta(L,-1,future_metatable_name)) {
+        future_type *fc =
+          (future_type *)lua_touserdata(L,-1);
+        ptr_type p = fc->get();
+        for(int i=0;i<p->size();i++) {
+          (*p)[i].unpack(L);
+          lua_remove(L,-2);
+        }
+      }
+    }
+    lua_remove(L,1);
+    argn = lua_gettop(L);
+  } else {
+    std::string func;
+    if(lua_istable(L,-1)) {
+      // Func
+      lua_pushstring(L,"func");
+      lua_gettable(L,-2);
+      if(lua_isfunction(L,-1)) {
+        lua_insert(L,1);
+      } else if(lua_isstring(L,-1)) {
+        func = lua_tostring(L,-1);
+        lua_getglobal(L,func.c_str());
+        if(lua_isfunction(L,-1)) {
+          lua_insert(L,1);
+        } else {
+          std::string msg = func+" is not a function";
+          lua_pushstring(L,msg.c_str());
+          return 0;
+        }
+      } else {
+        lua_pushstring(L,"No function supplied to call");
+        return 0;
+      }
+      // Args
+      lua_pushstring(L,"args");
+      lua_gettable(L,-2);
+      if(lua_istable(L,-1)) {
+        lua_pushnil(L);
+        while(lua_next(L,-2) != 0) {
+          while(cmp_meta(L,-1,future_metatable_name)) {
+            future_type *fc =
+              (future_type *)lua_touserdata(L,-1);
+            ptr_type p = fc->get();
+            for(int i=0;i<p->size();i++) {
+              (*p)[i].unpack(L);
+              lua_remove(L,-2);
+            }
+          }
+          lua_insert(L,++argn);
+          lua_pushvalue(L,-1);
+          lua_remove(L,-2);
+        }
+      } else {
+        lua_pushstring(L,"args is not a table");
+        return 0;
+      }
+    }
+    lua_remove(L,-1);
+    lua_remove(L,-1);
+  }
+  lua_pcall(L,argn-1,100,0);
+  return lua_gettop(L);
 }
 
 //--- Handle dataflow calling from Lua
@@ -1635,15 +1676,21 @@ int async(lua_State *L) {
     // Package up the arguments
     ptr_type args(new std::vector<Holder>());
     int nargs = lua_gettop(L);
+    
+    //CHECK_STRING(1,"async")
+    string_ptr fname{new std::string};
+    *fname = getfunc(L,1);
+    if(*fname == unwrapped_str) {
+      Holder h;
+      h.pack(L,1);
+      h.push(args);
+      *fname = "call";
+    }
     for(int i=2;i<=nargs;i++) {
       Holder h;
       h.pack(L,i);
       h.push(args);
     }
-    
-    //CHECK_STRING(1,"async")
-    string_ptr fname{new std::string};
-    *fname = getfunc(L,1);
 
     // Launch the thread
     future_type f =
