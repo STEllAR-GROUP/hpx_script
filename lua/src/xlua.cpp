@@ -968,56 +968,6 @@ void push_key(lua_State *L,const key_type& kt) {
   }
 }
 
-int hpx_table_find(lua_State *L) {
-  if(cmp_meta(L,1,table_metatable_name)) {
-    table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,1);
-    table_ptr fnc = *fnc_p;
-    if(lua_isnil(L,2)) {
-      lua_pop(L,lua_gettop(L));
-      auto f = fnc->t.begin();
-      if(f != fnc->t.end()) {
-        push_key(L,f->first);
-        Holder h = f->second;
-        h.unpack(L);
-        return 2;
-      } else {
-        lua_pushnil(L);
-      }
-    } else if(lua_isnumber(L,2)) {
-      key_type k = lua_tonumber(L,2);
-      lua_pop(L,lua_gettop(L));
-      auto f = fnc->t.find(k);
-      if(f != fnc->t.end())
-        ++f;
-      if(f != fnc->t.end()) {
-        push_key(L,f->first);
-        Holder h = f->second;
-        h.unpack(L);
-        return 2;
-      } else {
-        lua_pushnil(L);
-      }
-    } else if(lua_isstring(L,2)) {
-      key_type k = lua_tostring(L,2);
-      lua_pop(L,lua_gettop(L));
-      auto f = fnc->t.find(k);
-      if(f != fnc->t.end())
-        ++f;
-      if(f != fnc->t.end()) {
-        push_key(L,f->first);
-        Holder h = f->second;
-        h.unpack(L);
-        return 2;
-      } else {
-        lua_pushnil(L);
-      }
-    } else {
-      lua_pushnil(L);
-    }
-  }
-  return 1;
-}
-
 int table_name(lua_State *L) {
   lua_pushstring(L,table_metatable_name);
   return 1;
@@ -1048,11 +998,6 @@ int table_new_index(lua_State *L) {
       h = ptr->second;
     } else {
       std::string key = lua_tostring(L,2);
-      if(key == "find") {
-        lua_pop(L,2);
-        lua_pushcfunction(L,hpx_table_find);
-        return 1;
-      }
       if(key == "Name") {
         lua_pop(L,2);
         lua_pushcfunction(L,table_name);
@@ -1071,7 +1016,6 @@ int table_new_index(lua_State *L) {
 
 int open_table(lua_State *L) {
     static const struct luaL_Reg table_meta_funcs [] = {
-        {"find",&hpx_table_find},
         {NULL,NULL},
     };
 
@@ -1109,10 +1053,6 @@ int open_table(lua_State *L) {
 
     lua_pushstring(L,"__ipairs");
     lua_pushcfunction(L,table_ipairs);
-    lua_settable(L,-3);
-
-    lua_pushstring(L,"find");
-    lua_pushcfunction(L,hpx_table_find);
     lua_settable(L,-3);
 
     lua_pushstring(L,"name");
