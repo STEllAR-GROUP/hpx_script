@@ -201,6 +201,11 @@ public:
   }
 };
 
+template<typename T>
+void dtor(T *t) {
+  t->T::~T();
+}
+
 // END Header file
 }
 #endif
