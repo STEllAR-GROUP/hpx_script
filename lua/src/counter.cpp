@@ -66,12 +66,17 @@ bool discover_callback(table_ptr& tp,lua_State *L,hpx::performance_counters::cou
 }
 
 int xlua_get_counter(lua_State *L) {
-  if(cmp_meta(L,-1,table_metatable_name)) {
+  if(lua_isstring(L,-1)) {
+    table_ptr& tp = *(table_ptr *)lua_touserdata(L,-1);
+    hpx::performance_counters::counter_info c;
+    c.fullname_ = lua_tostring(L,-1);
+    new_naming_id(L);
+    hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
+    *fnc = hpx::performance_counters::get_counter(c);
+  } else if(cmp_meta(L,-1,table_metatable_name)) {
     table_ptr& tp = *(table_ptr *)lua_touserdata(L,-1);
     hpx::performance_counters::counter_info c;
     c.fullname_ = boost::get<std::string>((tp->t)["fullname_"].var);
-    c.type_ = (hpx::performance_counters::counter_type)boost::get<double>((tp->t)["type_"].var);
-    c.version_ = boost::get<double>((tp->t)["version_"].var);
     new_naming_id(L);
     hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
     *fnc = hpx::performance_counters::get_counter(c);
