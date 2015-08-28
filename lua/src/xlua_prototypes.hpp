@@ -36,6 +36,7 @@ int hpx_run(lua_State *L);
 
 int luax_run_guarded(lua_State *L);
 
+int open_naming_id(lua_State *L);
 int open_vector(lua_State *L);
 int open_table(lua_State *L);
 int open_table_iter(lua_State *L);
@@ -43,6 +44,7 @@ int open_future(lua_State *L);
 int open_guard(lua_State *L);
 int open_locality(lua_State *L);
 
+int new_naming_id(lua_State *L);
 int new_future(lua_State *L);
 int new_table(lua_State *L);
 int new_vector(lua_State *L);

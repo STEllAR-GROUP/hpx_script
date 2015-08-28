@@ -4,12 +4,52 @@
 
 namespace hpx {
 
-union did {
-  hpx::naming::id_type id;
-  double d;
-  did() {}
-  ~did() {}
-};
+int new_naming_id(lua_State *L) {
+  size_t nbytes = sizeof(hpx::naming::id_type);
+  char *bytes = (char *)lua_newuserdata(L,nbytes);
+  luaL_setmetatable(L,naming_id_metatable_name);
+  new (bytes) hpx::naming::id_type();
+  return 1;
+}
+
+int naming_id_name(lua_State *L) {
+  lua_pushstring(L,naming_id_metatable_name);
+  return 1;
+}
+
+int naming_id_clean(lua_State *L) {
+    if(cmp_meta(L,-1,naming_id_metatable_name)) {
+      hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
+      dtor(fnc);
+    }
+    return 1;
+}
+
+int open_naming_id(lua_State *L) {
+    static const struct luaL_Reg naming_id_meta_funcs [] = {
+        {"Name",naming_id_name},
+        {NULL,NULL},
+    };
+
+    static const struct luaL_Reg naming_id_funcs [] = {
+        {"new", &new_naming_id},
+        {NULL, NULL}
+    };
+
+    luaL_newlib(L,naming_id_funcs);
+
+    luaL_newmetatable(L,naming_id_metatable_name);
+    luaL_newlib(L, naming_id_meta_funcs);
+    lua_setfield(L,-2,"__index");
+
+    lua_pushstring(L,"__gc");
+    lua_pushcfunction(L,naming_id_clean);
+    lua_settable(L,-3);
+
+    lua_pop(L,1);
+
+    return 1;
+}
 
 bool discover_callback(table_ptr& tp,lua_State *L,hpx::performance_counters::counter_info const& c,hpx::error_code& ec) {
   new_table(L);
@@ -32,20 +72,19 @@ int xlua_get_counter(lua_State *L) {
     c.fullname_ = boost::get<std::string>((tp->t)["fullname_"].var);
     c.type_ = (hpx::performance_counters::counter_type)boost::get<double>((tp->t)["type_"].var);
     c.version_ = boost::get<double>((tp->t)["version_"].var);
-    did d;
-    d.id = hpx::performance_counters::get_counter(c);
-    lua_pushnumber(L,d.d);
+    new_naming_id(L);
+    hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
+    *fnc = hpx::performance_counters::get_counter(c);
     return 1;
   }
   return 0;
 }
 
 int xlua_get_value(lua_State *L) {
-  if(lua_gettop(L)==1 && lua_isnumber(L,-1)) {
-    did d;
-    d.d = lua_tonumber(L,-1);
+  if(lua_gettop(L)==1 && cmp_meta(L,-1,naming_id_metatable_name)) {
+    hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
     hpx::performance_counters::counter_value value =
-      hpx::performance_counters::stubs::performance_counter::get_value(d.id);
+      hpx::performance_counters::stubs::performance_counter::get_value(*fnc);
     lua_pop(L,lua_gettop(L));
     new_table(L);
     table_ptr& tp = *(table_ptr *)lua_touserdata(L,-1);
@@ -61,10 +100,9 @@ int xlua_get_value(lua_State *L) {
 }
 
 int xlua_start(lua_State *L) {
-  if(lua_gettop(L)==1 && lua_isnumber(L,-1)) {
-    did d;
-    d.d = lua_tonumber(L,-1);
-    bool res = hpx::performance_counters::stubs::performance_counter::start(d.id);
+  if(lua_gettop(L)==1 && cmp_meta(L,-1,naming_id_metatable_name)) {
+    hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
+    bool res = hpx::performance_counters::stubs::performance_counter::start(*fnc);
     lua_pushboolean(L,res);
     return 1;
   }
@@ -72,10 +110,9 @@ int xlua_start(lua_State *L) {
 }
 
 int xlua_stop(lua_State *L) {
-  if(lua_gettop(L)==1 && lua_isnumber(L,-1)) {
-    did d;
-    d.d = lua_tonumber(L,-1);
-    bool res = hpx::performance_counters::stubs::performance_counter::start(d.id);
+  if(lua_gettop(L)==1 && cmp_meta(L,-1,naming_id_metatable_name)) {
+    hpx::naming::id_type *fnc = (hpx::naming::id_type *)lua_touserdata(L,-1);
+    bool res = hpx::performance_counters::stubs::performance_counter::start(*fnc);
     lua_pushboolean(L,res);
     return 1;
   }

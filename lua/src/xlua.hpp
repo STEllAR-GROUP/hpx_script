@@ -41,6 +41,7 @@ extern const char *table_iter_metatable_name;
 extern const char *future_metatable_name;
 extern const char *guard_metatable_name;
 extern const char *locality_metatable_name;
+extern const char *naming_id_metatable_name;
 
 std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line,bool recurse=true);
 
@@ -126,7 +127,7 @@ private:
       ar & var;
     }
 public:
-  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t };
+  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t, naming_id_t };
 
   boost::variant<
     Empty,
@@ -136,7 +137,8 @@ public:
     ptr_type,
     table_ptr,
     Bytecode,
-    vector_ptr
+    vector_ptr,
+    hpx::naming::id_type
     > var;
 
   void set(double num_) {

@@ -18,6 +18,8 @@ const char *table_iter_metatable_name = "table_iter";
 const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
 const char *locality_metatable_name = "hpx_locality";
+const char *naming_id_metatable_name = "naming_id";
+
 const char *hpx_metatable_name = "hpx";
 
 const char *lua_read(lua_State *L,void *data,size_t *size);
@@ -82,6 +84,7 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     open_table(L);
     luaL_requiref(L, "table_t", &open_table, 1);
     luaL_requiref(L, "vector_t", &open_vector, 1);
+    luaL_requiref(L, "naming_id_t", &open_naming_id, 1);
     open_table_iter(L);
     luaL_requiref(L, "table_iter_t", &open_table_iter, 1);
     open_future(L);
@@ -136,6 +139,10 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       new_vector(L);
       vector_ptr *tp = (vector_ptr *)lua_touserdata(L,-1);
       *tp = boost::get<vector_ptr>(var);
+    } else if(var.which() == naming_id_t) {
+      new_naming_id(L);
+      hpx::naming::id_type *tp = (hpx::naming::id_type *)lua_touserdata(L,-1);
+      *tp = boost::get<hpx::naming::id_type>(var);
     } else if(var.which() == table_t) {
       new_table(L);
       table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
@@ -189,6 +196,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       var = *(table_ptr *)lua_touserdata(L,index);
     } else if(cmp_meta(L,index,vector_metatable_name)) {
       var = *(vector_ptr *)lua_touserdata(L,index);
+    } else if(cmp_meta(L,index,naming_id_metatable_name)) {
+      var = *(hpx::naming::id_type *)lua_touserdata(L,index);
     } else if(lua_istable(L,index)) {
       try {
         int nn = lua_gettop(L);
@@ -206,7 +215,6 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
             h.pack(L,-2);
             if(h.var.which() != empty_t) {
               (table->t)[key] = h;
-              //STACK;
               if(key == 0) {
                 std::cout << "pack0:PRINT=" << (*this) << std::endl;
                 abort();
@@ -276,8 +284,36 @@ LuaEnv::~LuaEnv() {
   ptr->busy = false;
   set_lua_ptr(ptr);
 }
-const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
-  guard_metatable_name, locality_metatable_name,vector_metatable_name,0};
+const char *metatables[] = {
+  table_metatable_name, table_iter_metatable_name,
+  future_metatable_name, guard_metatable_name,
+  locality_metatable_name,vector_metatable_name,
+  naming_id_metatable_name,
+  0};
+
+int get_mtable(lua_State *L) {
+  if(lua_isnil(L,-1))
+    return false;
+  if(!lua_isuserdata(L,-1))
+    return false;
+  int ss1 = lua_gettop(L);
+  lua_getfield(L,-1,"Name");
+  int ss2 = lua_gettop(L);
+  if(ss1+1 != ss2)
+    return false;
+  if(!lua_iscfunction(L,-1))
+    return false;
+  lua_CFunction f = lua_tocfunction(L,-1);
+  lua_pop(L,1);
+  if(f == nullptr)
+    return false;
+  lua_pop(L,lua_gettop(L));
+  (*f)(L);
+  if(lua_isstring(L,-1)) {
+    return 1;
+  }
+  return 0;
+}
 
 bool cmp_meta(lua_State *L,int index,const char *name) {
   if(lua_isnil(L,index))
@@ -302,17 +338,6 @@ bool cmp_meta(lua_State *L,int index,const char *name) {
     return nm == name;
   }
   return false;
-}
-
-int get_mtable(lua_State *L) {
-  for(const char **p = metatables; *p != 0; ++p) {
-    if(cmp_meta(L,-1,*p)) {
-      lua_pushstring(L,*p);
-      return 1;
-    }
-  }
-  lua_pushnil(L);
-  return 1;
 }
 
 guard_type global_guarded{new Guard()};
@@ -904,10 +929,6 @@ int loc_name(lua_State *L) {
   return 1;
 }
 
-int hello(lua_State *L) {
-  std::cout << "Hello" << std::endl;
-}
-
 int open_hpx(lua_State *L) {
     /*
     static const struct luaL_Reg hpx_meta_funcs [] = {
@@ -916,7 +937,6 @@ int open_hpx(lua_State *L) {
     */
 
     static const struct luaL_Reg hpx_funcs [] = {
-        {"hello",hello},
         {"async",async},
         {"start",xlua_start},
         {"stop",xlua_stop},
@@ -1520,9 +1540,7 @@ void unwrap_future(lua_State *L,int index,future_type& f) {
       unwrap_future(L,index,f2);
     } else {
       (*p)[0].unpack(L);
-      STACK;
       lua_replace(L,index);
-      STACK;
     }
   }
 }
