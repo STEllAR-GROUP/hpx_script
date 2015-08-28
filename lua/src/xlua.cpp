@@ -13,6 +13,7 @@ const int max_output_args = 10;
 namespace hpx {
 
 const char *table_metatable_name = "table";
+const char *vector_metatable_name = "vector_num";
 const char *table_iter_metatable_name = "table_iter";
 const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
@@ -55,6 +56,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     lua_setglobal(L,"unwrap");
     lua_pushcfunction(L,isfuture);
     lua_setglobal(L,"isfuture");
+    lua_pushcfunction(L,isvector);
+    lua_setglobal(L,"isvector");
     lua_pushcfunction(L,islocality);
     lua_setglobal(L,"islocality");
     lua_pushcfunction(L,istable);
@@ -78,6 +81,7 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     luaL_requiref(L, "hpx",&open_hpx, 1);
     open_table(L);
     luaL_requiref(L, "table_t", &open_table, 1);
+    luaL_requiref(L, "vector_t", &open_vector, 1);
     open_table_iter(L);
     luaL_requiref(L, "table_iter_t", &open_table_iter, 1);
     open_future(L);
@@ -128,6 +132,10 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       new_future(L);
       future_type *fc = (future_type *)lua_touserdata(L,-1);
       *fc = boost::get<future_type>(var);
+    } else if(var.which() == vector_t) {
+      new_vector(L);
+      vector_ptr *tp = (vector_ptr *)lua_touserdata(L,-1);
+      *tp = boost::get<vector_ptr>(var);
     } else if(var.which() == table_t) {
       new_table(L);
       table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
@@ -179,6 +187,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       var = *(future_type *)lua_touserdata(L,index);
     } else if(cmp_meta(L,index,table_metatable_name)) {
       var = *(table_ptr *)lua_touserdata(L,index);
+    } else if(cmp_meta(L,index,vector_metatable_name)) {
+      var = *(vector_ptr *)lua_touserdata(L,index);
     } else if(lua_istable(L,index)) {
       try {
         int nn = lua_gettop(L);
@@ -267,7 +277,7 @@ LuaEnv::~LuaEnv() {
   set_lua_ptr(ptr);
 }
 const char *metatables[] = {table_metatable_name, table_iter_metatable_name, future_metatable_name,
-  guard_metatable_name, locality_metatable_name,0};
+  guard_metatable_name, locality_metatable_name,vector_metatable_name,0};
 
 bool cmp_meta(lua_State *L,int index,const char *name) {
   if(lua_isnil(L,index))
@@ -292,6 +302,17 @@ bool cmp_meta(lua_State *L,int index,const char *name) {
     return nm == name;
   }
   return false;
+}
+
+int get_mtable(lua_State *L) {
+  for(const char **p = metatables; *p != 0; ++p) {
+    if(cmp_meta(L,-1,*p)) {
+      lua_pushstring(L,*p);
+      return 1;
+    }
+  }
+  lua_pushnil(L);
+  return 1;
 }
 
 guard_type global_guarded{new Guard()};
@@ -322,6 +343,18 @@ std::ostream& operator<<(std::ostream& out,const Holder& holder) {
           out << i->first << ":" << i->second;
         }
         out << "}";
+      }
+      break;
+    case Holder::vector_t:
+      {
+        vector_ptr t = boost::get<vector_ptr>(holder.var);
+        out << "[";
+        for(int i=1;i < t->size(); ++i) {
+          if(i > 1)
+            out << ",";
+          out << (*t)[i];
+        }
+        out << "]";
       }
       break;
     case Holder::fut_t:
@@ -887,6 +920,7 @@ int open_hpx(lua_State *L) {
         {"async",async},
         {"start",xlua_start},
         {"stop",xlua_stop},
+        {"get_mtable",get_mtable},
         {"discover_counter_types",discover},
         {"get_counter",xlua_get_counter},
         {"get_value",xlua_get_value}, // xxx
@@ -1363,6 +1397,17 @@ int luax_run_guarded(lua_State *L) {
 
 int isfuture(lua_State *L) {
     if(cmp_meta(L,-1,future_metatable_name)) {
+      lua_pop(L,1);
+      lua_pushboolean(L,1);
+    } else {
+      lua_pop(L,1);
+      lua_pushboolean(L,0);
+    }
+    return 1;
+}
+
+int isvector(lua_State *L) {
+    if(cmp_meta(L,-1,vector_metatable_name)) {
       lua_pop(L,1);
       lua_pushboolean(L,1);
     } else {

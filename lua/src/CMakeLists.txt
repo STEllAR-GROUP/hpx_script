@@ -27,16 +27,16 @@ if(HPX_FOUND)
   include_directories(.)
 
 
-  add_hpx_library(xlua
-    SOURCES xlua.cpp counter.cpp table.cpp
-    HEADERS xlua.hpp
-  )
-
   add_hpx_executable(xlua
     ESSENTIAL
     SOURCES lua.cpp
     DEPENDENCIES xlua_lib
     )
+
+  add_hpx_library(xlua
+    SOURCES xlua.cpp counter.cpp table.cpp vector.cpp
+    HEADERS xlua.hpp
+  )
 
   add_hpx_executable(hello
     ESSENTIAL

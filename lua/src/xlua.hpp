@@ -36,6 +36,7 @@
 namespace hpx {
 
 extern const char *table_metatable_name;
+extern const char *vector_metatable_name;
 extern const char *table_iter_metatable_name;
 extern const char *future_metatable_name;
 extern const char *guard_metatable_name;
@@ -65,6 +66,7 @@ typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
 typedef boost::variant<double,std::string> key_type;
 typedef std::map<key_type,Holder> table_type;
+typedef boost::shared_ptr<std::vector<double> > vector_ptr;
 //typedef boost::shared_ptr<std::map<key_type,Holder> > table_ptr;
 struct table_inner {
   table_inner() {}
@@ -124,7 +126,7 @@ private:
       ar & var;
     }
 public:
-  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t };
+  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t };
 
   boost::variant<
     Empty,
@@ -133,7 +135,8 @@ public:
     std::string,
     ptr_type,
     table_ptr,
-    Bytecode
+    Bytecode,
+    vector_ptr
     > var;
 
   void set(double num_) {

@@ -29,12 +29,14 @@ int hpx_reg(lua_State *L);
 int isfuture(lua_State *L);
 int istable(lua_State *L);
 int islocality(lua_State *L);
+int isvector(lua_State *L);
 
 int hpx_run(lua_State *L);
 
 
 int luax_run_guarded(lua_State *L);
 
+int open_vector(lua_State *L);
 int open_table(lua_State *L);
 int open_table_iter(lua_State *L);
 int open_future(lua_State *L);
@@ -43,6 +45,7 @@ int open_locality(lua_State *L);
 
 int new_future(lua_State *L);
 int new_table(lua_State *L);
+int new_vector(lua_State *L);
 
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
