@@ -47,6 +47,8 @@ int new_table(lua_State *L);
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
 bool cmp_meta(lua_State *L,int index,const char *meta_name);
+
+int open_hpx(lua_State *L);
 }
 
 #endif

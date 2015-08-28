@@ -17,6 +17,7 @@ const char *table_iter_metatable_name = "table_iter";
 const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
 const char *locality_metatable_name = "hpx_locality";
+const char *hpx_metatable_name = "hpx";
 
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
@@ -73,6 +74,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     lua_pushcfunction(L,root_locality);
     lua_setglobal(L,"find_root_locality");
 
+    //open_hpx(L);
+    luaL_requiref(L, "hpx",&open_hpx, 1);
     open_table(L);
     luaL_requiref(L, "table_t", &open_table, 1);
     open_table_iter(L);
@@ -1134,6 +1137,33 @@ int hpx_locality_clean(lua_State *L) {
 int loc_name(lua_State *L) {
   lua_pushstring(L,locality_metatable_name);
   return 1;
+}
+
+int hello(lua_State *L) {
+  std::cout << "Hello" << std::endl;
+}
+
+int open_hpx(lua_State *L) {
+    /*
+    static const struct luaL_Reg hpx_meta_funcs [] = {
+        {NULL,NULL},
+    };
+    */
+
+    static const struct luaL_Reg hpx_funcs [] = {
+        {"hello",hello},
+        {"async",async},
+        {"start",xlua_start},
+        {"stop",xlua_stop},
+        {"discover_counter_types",discover},
+        {"get_counter",xlua_get_counter},
+        {"get_value",xlua_get_value}, // xxx
+        {NULL, NULL}
+    };
+
+    luaL_newlib(L,hpx_funcs);
+
+    return 1;
 }
 
 int open_locality(lua_State *L) {
