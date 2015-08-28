@@ -190,14 +190,26 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       set(lua_tonumber(L,index));
     } else if(lua_isstring(L,index)) {
       set(lua_tostring(L,index));
-    } else if(cmp_meta(L,index,future_metatable_name)) {
-      var = *(future_type *)lua_touserdata(L,index);
-    } else if(cmp_meta(L,index,table_metatable_name)) {
-      var = *(table_ptr *)lua_touserdata(L,index);
-    } else if(cmp_meta(L,index,vector_metatable_name)) {
-      var = *(vector_ptr *)lua_touserdata(L,index);
-    } else if(cmp_meta(L,index,naming_id_metatable_name)) {
-      var = *(hpx::naming::id_type *)lua_touserdata(L,index);
+    } else if(lua_isuserdata(L,index)) {
+      lua_pushvalue(L,index);
+      int n1 = lua_gettop(L);
+      get_mtable(L);
+      int n2 = lua_gettop(L);
+      assert(n2 == n1 + 1);
+      std::string s = lua_tostring(L,-1);
+      lua_pop(L,2);
+      if(s == future_metatable_name) {
+        var = *(future_type *)lua_touserdata(L,index);
+      } else if(s == table_metatable_name) {
+        var = *(table_ptr *)lua_touserdata(L,index);
+      } else if(s == vector_metatable_name) {
+        var = *(vector_ptr *)lua_touserdata(L,index);
+      } else if(s == naming_id_metatable_name) {
+        var = *(hpx::naming::id_type *)lua_touserdata(L,index);
+      } else {
+        std::cerr << "Can't pack key value!" << lua_type(L,-1) << std::endl;
+        abort();
+      }
     } else if(lua_istable(L,index)) {
       try {
         int nn = lua_gettop(L);
@@ -307,12 +319,8 @@ int get_mtable(lua_State *L) {
   lua_pop(L,1);
   if(f == nullptr)
     return false;
-  lua_pop(L,lua_gettop(L));
   (*f)(L);
-  if(lua_isstring(L,-1)) {
-    return 1;
-  }
-  return 0;
+  return lua_gettop(L);
 }
 
 bool cmp_meta(lua_State *L,int index,const char *name) {

@@ -30,6 +30,7 @@ int isfuture(lua_State *L);
 int istable(lua_State *L);
 int islocality(lua_State *L);
 int isvector(lua_State *L);
+int get_mtable(lua_State *L);
 
 int hpx_run(lua_State *L);
 
