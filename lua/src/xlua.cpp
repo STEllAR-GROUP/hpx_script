@@ -1187,10 +1187,19 @@ int xlua_unwrapped(lua_State *L) {
 bool loadFunc(lua_State *L) {
   if(lua_isfunction(L,-1)) {
     lua_insert(L,1);
-    lua_pop(L,1);
     return true;
   } else if(lua_isstring(L,-1)) {
     const char *func = lua_tostring(L,-1);
+    /*
+    if(is_bytecode(func)) {
+      std::string bytecode = func;
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,0,"b") != 0) {
+        lua_pop(L,1);
+      }
+      STACK;
+      return true;
+    }
+    */
     lua_getglobal(L,func);
     if(lua_isfunction(L,-1)) {
       lua_insert(L,1);
