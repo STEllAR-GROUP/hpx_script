@@ -74,8 +74,6 @@ function do_work(nx,nt,sz)
   return u[nextv]
 end
 
-HPX_PLAIN_ACTION('heat','do_work','ret','idx','heat_part','Partition_new','table_insert')
-
 u = do_work(10000,60,1000)
 n = 1
 for i,v in ipairs(u) do
