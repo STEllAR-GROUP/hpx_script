@@ -37,9 +37,6 @@ function Partition_new(size,initial_value)
 end
 
 function heat_part(left,middle,right)
-  left = left:Get()
-  right = right:Get()
-  middle = middle:Get()
   local nh
   local nextp = Partition_new(#middle,0)
   local lf = left[#left] 
@@ -72,10 +69,10 @@ function do_work(nx,nt,sz)
     currv = ((t-1) % 2)+1
     nextv = (t % 2)+1
     for x=1,np do
-      local result = async('heat_part',
+      local result = async(unwrapped('heat_part',
         u[currv][idx(x,-1,np)],
         u[currv][x],
-        u[currv][idx(x,1,np)])
+        u[currv][idx(x,1,np)]))
       u[nextv][x] = result
     end
   end
@@ -89,9 +86,6 @@ u = do_work(800000,60,1000)
 n = 1
 for i,v in ipairs(u) do
   uv = v
-  if(isfuture(uv))then
-    uv = uv:Get()
-  end
   for j,k in ipairs(uv) do
     io.write('U[',n,'] = ',k,'\n')
     n = n+1
