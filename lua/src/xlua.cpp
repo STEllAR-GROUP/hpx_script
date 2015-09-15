@@ -647,6 +647,15 @@ int luax_wait_all(lua_State *L) {
     } else if(cmp_meta(L,i,future_metatable_name)) {
       future_type *fnc = (future_type *)lua_touserdata(L,i);
       v.push_back(*fnc);
+    } else if(cmp_meta(L,i,table_metatable_name)) {
+      table_ptr& tp = *(table_ptr *)lua_touserdata(L,i);
+      for(auto i=tp->t.begin(); i != tp->t.end(); ++i) {
+        int w = i->second.var.which();
+        if(w == Holder::fut_t) {
+          future_type& f = boost::get<future_type>(i->second.var);
+          v.push_back(f);
+        }
+      }
     }
   }
 

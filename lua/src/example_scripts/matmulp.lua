@@ -9,7 +9,7 @@ end
 
 function matmul(a,b,c,n)
   local i
-  local f={} --table_t.new()
+  local f=table_t.new()
   for i=1,n do
     f[i]=async('inner',a,b,c,i,n)
   end
