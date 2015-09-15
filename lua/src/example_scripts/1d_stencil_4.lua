@@ -1,9 +1,3 @@
-require('mypr')
-
-function ret(x)
-  return x
-end
-
 function idx(i,dir,nx)
   if(dir > 0 and i == nx)then
     return 1
@@ -83,7 +77,7 @@ function do_work(nx,nt,sz)
   return u[nextv]
 end
 
-HPX_PLAIN_ACTION('heat','do_work','ret','idx','heat_part','Partition_new','mypr','myprn','table_insert')
+HPX_PLAIN_ACTION('heat','do_work','idx','heat_part','Partition_new','table_insert')
 
 u = do_work(80000,60,1000)
 n = 1

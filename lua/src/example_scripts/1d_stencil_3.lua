@@ -1,57 +1,3 @@
-function mypr(a)
-  local t
-  t = type(a)
-  if(t == "nil")then
-    io.write('nil')
-  elseif(t == "string")then
-    io.write('"',a,'"')
-  elseif(t == "number")then
-    io.write(a)
-  elseif(t == "table")then
-    if(a["pr"] ~= nil)then
-      a:pr()
-      return
-    end
-    local k,v,sep
-    io.write('{')
-    sep = ''
-    for k,v in pairs(a)do
-      io.write(sep)
-      mypr(k)
-      io.write('=')
-      mypr(v)
-      sep = ','
-    end
-    io.write('}')
-  elseif(t == "userdata")then
-    local v
-    v = a:Get()
-    if(type(v)=="userdata")then
-      io.write("recursion")
-    else
-      io.write('${')
-      mypr(v)
-      io.write('}')
-    end
-  elseif(t == "xuserdata")then
-    io.write("userdata={")
-    mypr(getmetatable(a))
-    io.write("}")
-  elseif(t == "function")then
-    io.write("func()")
-  else
-    io.write('[',t,"?]")
-  end
-end
-function myprn(a)
-  mypr(a)
-  io.write("\n")
-end
-
-function ret(x)
-  return x
-end
-
 function idx(i,dir,nx)
   if(dir > 0 and i == nx)then
     return 1
@@ -128,7 +74,6 @@ function do_work(nx,nt,sz)
   return u[nextv]
 end
 
-HPX_PLAIN_ACTION('heat','do_work','ret','idx','heat_part','Partition_new','mypr','myprn','table_insert')
 
 u = do_work(80000,60,1000)
 n = 1
