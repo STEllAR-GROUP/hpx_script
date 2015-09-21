@@ -48,7 +48,7 @@ end
 
 HPX_PLAIN_ACTION('heat','do_work','make_ready_future','ret','idx')
 
-u = do_work(1000,600)
+u = do_work(100,60)
 nn = 0
 for x,v in ipairs(u) do
   print("U["..x.."] = "..v:Get())

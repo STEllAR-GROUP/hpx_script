@@ -12,10 +12,10 @@ function fib(n)
   local n1
   local n2
   if (n > 21) then
-    n1 = dataflow('fib',n-1)
+    n1 = async('fib',n-1)
     n2 = fib(n-2)
     --use another dataflow to get rid of get
-    return dataflow('fadd',n1,n2)
+    return async(unwrapped('fadd',n1,n2))
   else
     -- avoid any hpx calls if possible
     n1 = fibs(n-1)
