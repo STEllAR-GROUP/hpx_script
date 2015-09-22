@@ -64,7 +64,7 @@ extern "C" {
 ** lua_freeline defines how to free a line read by lua_readline.
 */
 
-#include <hpx/hpx_main.hpp>
+#include <hpx/hpx_init.hpp>
 #include <xlua.hpp>
 
 #if defined(LUA_USE_READLINE)
@@ -306,12 +306,14 @@ static int loadline (lua_State *L) {
   return status;
 }
 
+bool stop_flag = false;
 
 static void dotty (lua_State *L) {
   int status;
   const char *oldprogname = progname;
   progname = NULL;
   while ((status = loadline(L)) != -1) {
+    if(stop_flag) break;
     if (status == LUA_OK) status = docall(L, 0, LUA_MULTRET);
     report(L, status);
     if (status == LUA_OK && lua_gettop(L) > 0) {  /* any result to print? */
@@ -488,7 +490,18 @@ static int pmain (lua_State *L) {
 #include <ctime>
 #include <chrono>
 
-int main (int argc, char **argv) {
+bool connect_flag = false;
+
+void stop_monitor() {
+  stop_flag = true;
+  std::cout << "Stop!" << std::endl;
+}
+
+int hpx_startup::user_main (int argc, char **argv) {
+  hpx::promise<void> stop_flag;
+  if(connect_flag) {
+    hpx::register_shutdown_function(stop_monitor);
+  }
   auto ts = std::chrono::high_resolution_clock::now();
   int status, result;
   hpx::LuaEnv lenv;
@@ -508,4 +521,23 @@ int main (int argc, char **argv) {
   auto te = std::chrono::high_resolution_clock::now();
   printf("Execution time=%.2f secs\n",std::chrono::duration<double,std::milli>(te-ts).count()*1e-3);
   return (result && status == LUA_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+int main (int argc,char **argv) {
+  std::string connect = "lua-connect";
+  std::string argv0 = argv[0];
+
+  hpx::runtime_mode mode = hpx::runtime_mode_default;
+
+  std::vector<std::string> cfg;
+  cfg.push_back("hpx.commandline.allow_unknown=1");
+
+  if(argv0.size() >= connect.size() && std::equal(connect.rbegin(),connect.rend(),argv0.rbegin())) {
+    connect_flag = true;
+    cfg.push_back("hpx.run_hpx_main!=1");
+    mode = hpx::runtime_mode_connect;
+    std::cout << "Connect!" << std::endl;
+  }
+
+  return hpx::init(argc,argv,cfg,mode);
 }
