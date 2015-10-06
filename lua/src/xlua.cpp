@@ -312,6 +312,9 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       var = e;
     } else if(lua_isuserdata(L,index)) {
       std::cout << "Can't pack unknown user data!" << std::endl;
+    } else if(lua_isboolean(L,index)) {
+      // TODO: Make real support for booleans
+      var = lua_toboolean(L,index);
     } else {
       int t = lua_type(L,index);
       std::cerr << "Can't pack value! " << t << std::endl;
@@ -790,6 +793,7 @@ std::string getfunc(lua_State *L,int index) {
     lua_pushvalue(L,index);
     assert(lua_isfunction(L,-1));
     lua_dump(L,(lua_Writer)lua_write,&func);
+    lua_pop(L,1);
   } else if(lua_istable(L,index)) {
     // this is intended to be used with unwrapped
     func = unwrapped_str;
@@ -1190,6 +1194,9 @@ int xlua_unwrapped(lua_State *L) {
     lua_remove(L,1);
   }
   lua_settable(L,-3);
+  lua_pushstring(L,"unwrapped");
+  lua_pushboolean(L,true);
+  lua_settable(L,-3);
   return 1;
 }
 
@@ -1399,6 +1406,8 @@ ptr_type luax_async2(
       lua_getglobal(L,fname->c_str());
       if(lua_isfunction(L,-1)) {
         found = true;
+      } else {
+        lua_pop(L,1);
       }
 
       if(!found) {
@@ -1415,6 +1424,7 @@ ptr_type luax_async2(
         }
 
         lua_setglobal(L,fname->c_str());
+        lua_getglobal(L,fname->c_str());
       }
     }
 
