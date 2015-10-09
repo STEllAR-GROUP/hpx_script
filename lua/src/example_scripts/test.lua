@@ -113,5 +113,9 @@ c:Set("x",1)
 if c:Get("x"):Get() ~= 1 then
   print("Components don't work")
 end
+c:Set("loc",find_here())
+if ""..c:Get("loc"):Get() ~= ""..find_here() then
+  print("Component locality check failed")
+end
 
 print("No other output than this message means test succeeded")

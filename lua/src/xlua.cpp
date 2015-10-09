@@ -58,7 +58,6 @@ const char *table_iter_metatable_name = "table_iter";
 const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
 const char *locality_metatable_name = "hpx_locality";
-const char *naming_id_metatable_name = "naming_id";
 const char *lua_client_metatable_name = "lua_client";
 
 const char *hpx_metatable_name = "hpx";
@@ -125,7 +124,6 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     open_table(L);
     luaL_requiref(L, "table_t", &open_table, 1);
     luaL_requiref(L, "vector_t", &open_vector, 1);
-    luaL_requiref(L, "naming_id_t", &open_naming_id, 1);
     open_table_iter(L);
     luaL_requiref(L, "table_iter_t", &open_table_iter, 1);
     open_future(L);
@@ -181,8 +179,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       new_vector(L);
       vector_ptr *tp = (vector_ptr *)lua_touserdata(L,-1);
       *tp = boost::get<vector_ptr>(var);
-    } else if(var.which() == naming_id_t) {
-      new_naming_id(L);
+    } else if(var.which() == locality_t) {
+      new_locality(L);
       hpx::naming::id_type *tp = (hpx::naming::id_type *)lua_touserdata(L,-1);
       *tp = boost::get<hpx::naming::id_type>(var);
     } else if(var.which() == table_t) {
@@ -246,7 +244,7 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
         var = *(table_ptr *)lua_touserdata(L,index);
       } else if(s == vector_metatable_name) {
         var = *(vector_ptr *)lua_touserdata(L,index);
-      } else if(s == naming_id_metatable_name) {
+      } else if(s == locality_metatable_name) {
         var = *(hpx::naming::id_type *)lua_touserdata(L,index);
       } else {
         std::cerr << "Can't pack key value!" << lua_type(L,-1) << std::endl;
@@ -345,7 +343,6 @@ const char *metatables[] = {
   table_metatable_name, table_iter_metatable_name,
   future_metatable_name, guard_metatable_name,
   locality_metatable_name,vector_metatable_name,
-  naming_id_metatable_name,
   0};
 
 int get_mtable(lua_State *L) {
