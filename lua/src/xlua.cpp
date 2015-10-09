@@ -59,6 +59,7 @@ const char *future_metatable_name = "hpx_future";
 const char *guard_metatable_name = "hpx_guard";
 const char *locality_metatable_name = "hpx_locality";
 const char *naming_id_metatable_name = "naming_id";
+const char *lua_client_metatable_name = "lua_client";
 
 const char *hpx_metatable_name = "hpx";
 
@@ -133,6 +134,7 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     luaL_requiref(L, "guard",&open_guard, 1);
     open_locality(L);
     luaL_requiref(L, "locality",&open_locality, 1);
+    luaL_requiref(L, "component",&open_component, 1);
     lua_pop(L,lua_gettop(L));
     for(auto i=function_registry.begin();i != function_registry.end();++i) {
       // Insert into table
@@ -798,6 +800,7 @@ std::string getfunc(lua_State *L,int index) {
     // this is intended to be used with unwrapped
     func = unwrapped_str;
   } else {
+    STACK;
     func = "**error**";
     std::cout << "Getfunc error" << std::endl;
     abort();

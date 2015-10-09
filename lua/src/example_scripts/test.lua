@@ -108,4 +108,10 @@ if type(t1) ~= "number" then
   print("wrong type returned from value")
 end
 
+c = component.new(find_here())
+c:Set("x",1)
+if c:Get("x"):Get() ~= 1 then
+  print("Components don't work")
+end
+
 print("No other output than this message means test succeeded")

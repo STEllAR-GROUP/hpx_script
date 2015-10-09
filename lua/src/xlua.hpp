@@ -42,6 +42,7 @@ extern const char *future_metatable_name;
 extern const char *guard_metatable_name;
 extern const char *locality_metatable_name;
 extern const char *naming_id_metatable_name;
+extern const char *lua_client_metatable_name;
 
 std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line,bool recurse=true);
 
@@ -84,7 +85,27 @@ private:
       ar & size;
     }
 };
+
+struct Empty {
+private:
+    friend class hpx::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+    }
+};
 typedef boost::shared_ptr<table_inner> table_ptr;
+typedef boost::variant<
+  Empty,
+  double,
+  future_type,
+  std::string,
+  ptr_type,
+  table_ptr,
+  Bytecode,
+  vector_ptr,
+  hpx::naming::id_type
+  > variant_type;
 
 struct table_iter_type {
   bool ready = false;
@@ -108,15 +129,6 @@ void hpx_srun(string_ptr fname,ptr_type p,guard_type*,int);
 
 extern guard_type global_guarded;
 
-struct Empty {
-private:
-    friend class hpx::serialization::access;
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-    }
-};
-
 //--- Generic holder for a Lua data object
 class Holder {
 private:
@@ -129,17 +141,7 @@ private:
 public:
   enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t, naming_id_t };
 
-  boost::variant<
-    Empty,
-    double,
-    future_type,
-    std::string,
-    ptr_type,
-    table_ptr,
-    Bytecode,
-    vector_ptr,
-    hpx::naming::id_type
-    > var;
+  variant_type var;
 
   void set(double num_) {
     var = num_;

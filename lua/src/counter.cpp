@@ -51,10 +51,8 @@ int open_naming_id(lua_State *L) {
     return 1;
 }
 
-bool discover_callback(table_ptr& tp,lua_State *L,hpx::performance_counters::counter_info const& c,hpx::error_code& ec) {
-  new_table(L);
-  table_ptr& subtp = *(table_ptr *)lua_touserdata(L,-1);
-  lua_pop(L,1);
+bool discover_callback(table_ptr tp,hpx::performance_counters::counter_info const& c,hpx::error_code& ec) {
+  table_ptr subtp{new table_inner()};
   (subtp->t)["fullname_"].var = c.fullname_;
   (subtp->t)["helptext_"].var = c.helptext_;
   (subtp->t)["unit_of_measure_"].var = c.unit_of_measure_;
@@ -128,7 +126,7 @@ int discover(lua_State *L) {
   new_table(L);
   table_ptr& tp = *(table_ptr *)lua_touserdata(L,-1);
   tp->size = 1;
-  hpx::performance_counters::discover_counter_types(boost::bind(discover_callback,tp,L,_1,_2));
+  hpx::performance_counters::discover_counter_types(boost::bind(discover_callback,tp,_1,_2));
   return 1;
 }
 

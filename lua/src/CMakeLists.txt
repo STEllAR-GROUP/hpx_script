@@ -34,7 +34,7 @@ if(HPX_FOUND)
     )
 
   add_hpx_library(xlua
-    SOURCES xlua.cpp counter.cpp table.cpp vector.cpp
+    SOURCES xlua.cpp counter.cpp table.cpp vector.cpp component.cpp
     HEADERS xlua.hpp
   )
 
