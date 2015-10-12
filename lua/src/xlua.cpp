@@ -191,6 +191,10 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       new_locality(L);
       hpx::naming::id_type *tp = (hpx::naming::id_type *)lua_touserdata(L,-1);
       *tp = boost::get<hpx::naming::id_type>(var);
+    } else if(var.which() == client_t) {
+      new_component(L);
+      lua_aux_client *tp = (lua_aux_client*)lua_touserdata(L,-1);
+      *tp = boost::get<lua_aux_client>(var);
     } else if(var.which() == table_t) {
       new_table(L);
       table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
@@ -254,6 +258,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
         var = *(vector_ptr *)lua_touserdata(L,index);
       } else if(s == locality_metatable_name) {
         var = *(hpx::naming::id_type *)lua_touserdata(L,index);
+      } else if(s == lua_client_metatable_name) {
+        var = *(lua_aux_client *)lua_touserdata(L,index);
       } else {
         std::cerr << "Can't pack key value!" << lua_type(L,-1) << " s=" << s << std::endl;
         abort();

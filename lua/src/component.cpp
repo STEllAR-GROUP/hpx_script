@@ -69,6 +69,52 @@ struct lua_client
   }
 };
 
+#if 0
+struct lua_aux_client {
+  hpx::naming::id_type id;
+
+  hpx::future<ptr_type> get(std::string name)
+  {
+    lua_component::get_action act;
+    return hpx::async(act, id, name);
+  }
+
+  hpx::future<ptr_type> call(std::string name,ptr_type ptargs)
+  {
+    lua_component::call_action act;
+    return hpx::async(act, id, name, ptargs);
+  }
+
+  hpx::future<void> set(std::string name,Holder h) {
+    lua_component::set_action act;
+    return hpx::async(act, id, name, h);
+  }
+private:
+  friend class hpx::serialization::access;
+  template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & id;
+    }
+};
+#endif
+hpx::future<ptr_type> lua_aux_client::get(std::string name)
+{
+  lua_component::get_action act;
+  return hpx::async(act, id, name);
+}
+
+hpx::future<ptr_type> lua_aux_client::call(std::string name,ptr_type ptargs)
+{
+  lua_component::call_action act;
+  return hpx::async(act, id, name, ptargs);
+}
+
+hpx::future<void> lua_aux_client::set(std::string name,Holder h) {
+  lua_component::set_action act;
+  return hpx::async(act, id, name, h);
+}
+
 ptr_type lua_component::call(std::string func,ptr_type ptargs) {
   ptr_type pt{new std::vector<Holder>};
   bool found = false;
@@ -109,25 +155,30 @@ ptr_type lua_component::call(std::string func,ptr_type ptargs) {
   return pt;
 }
 
+int new_component(lua_State *L) {
+  size_t nbytes = sizeof(lua_aux_client); 
+  char *mem = (char *)lua_newuserdata(L, nbytes);
+  luaL_setmetatable(L,lua_client_metatable_name);
+  lua_aux_client *lcp = new (mem) lua_aux_client();
+  return 1;
+}
+
 int create_component(lua_State *L) {
   if(cmp_meta(L,-1,locality_metatable_name)) {
     locality_type *loc = (locality_type *)lua_touserdata(L,-1);
     lua_pop(L,1);
-    size_t nbytes = sizeof(lua_client); 
-    char *mem = (char *)lua_newuserdata(L, nbytes);
-    luaL_setmetatable(L,lua_client_metatable_name);
+    new_component(L);
+    lua_aux_client *lcp = (lua_aux_client *)lua_touserdata(L,-1);
     lua_client lc = hpx::new_<lua_client>(*loc);
-    lua_client *lcp = new (mem) lua_client();
-    *lcp = lc;
+    lcp->id = lc.get_id();
     return lua_gettop(L);
-  } else {
-    return 0;
   }
+  return 0;
 }
 
 int hpx_component_clean(lua_State *L) {
     if(cmp_meta(L,-1,lua_client_metatable_name)) {
-      lua_client *fnc = (lua_client *)lua_touserdata(L,-1);
+      lua_aux_client *fnc = (lua_aux_client *)lua_touserdata(L,-1);
       dtor(fnc);
     }
     return 0;
@@ -135,7 +186,7 @@ int hpx_component_clean(lua_State *L) {
 
 int lua_client_get(lua_State *L) {
     if(lua_isstring(L,-1) && cmp_meta(L,-2,lua_client_metatable_name)) {
-      lua_client *lcp = (lua_client *)lua_touserdata(L,-2);
+      lua_aux_client *lcp = (lua_aux_client *)lua_touserdata(L,-2);
       std::string key = lua_tostring(L,-1);
       lua_pop(L,2);
       new_future(L);
@@ -149,11 +200,11 @@ int lua_client_get(lua_State *L) {
 
 int lua_client_getid(lua_State *L) {
     if(cmp_meta(L,-1,lua_client_metatable_name)) {
-      lua_client *lcp = (lua_client *)lua_touserdata(L,-1);
+      lua_aux_client *lcp = (lua_aux_client *)lua_touserdata(L,-1);
       lua_pop(L,lua_gettop(L));
       new_locality(L);
       hpx::naming::id_type *tp = (hpx::naming::id_type *)lua_touserdata(L,-1);
-      *tp = lcp->get_id();
+      *tp = lcp->id;
       return 1;
     }
     return 0;
@@ -161,7 +212,7 @@ int lua_client_getid(lua_State *L) {
 
 int lua_client_call(lua_State *L) {
     if(cmp_meta(L,1,lua_client_metatable_name)) {
-      lua_client *lcp = (lua_client *)lua_touserdata(L,1);
+      lua_aux_client *lcp = (lua_aux_client *)lua_touserdata(L,1);
       std::string func;
       if(lua_isstring(L,2)) {
         func = lua_tostring(L,2);
@@ -189,7 +240,7 @@ int lua_client_call(lua_State *L) {
 
 int lua_client_set(lua_State *L) {
     if(lua_isstring(L,-2) && cmp_meta(L,-3,lua_client_metatable_name)) {
-      lua_client *lcp = (lua_client *)lua_touserdata(L,-3);
+      lua_aux_client *lcp = (lua_aux_client *)lua_touserdata(L,-3);
       std::string key = lua_tostring(L,-2);
       Holder h;
       h.pack(L,-1);

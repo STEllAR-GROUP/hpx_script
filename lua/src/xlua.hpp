@@ -84,6 +84,25 @@ private:
     }
 };
 
+struct lua_aux_client {
+  hpx::naming::id_type id;
+
+  lua_aux_client() {}
+
+  hpx::future<ptr_type> get(std::string name);
+
+  hpx::future<ptr_type> call(std::string name,ptr_type ptargs);
+
+  hpx::future<void> set(std::string name,Holder h);
+private:
+  friend class hpx::serialization::access;
+  template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & id;
+    }
+};
+
 struct Empty {
 private:
     friend class hpx::serialization::access;
@@ -102,7 +121,8 @@ typedef boost::variant<
   table_ptr,
   Bytecode,
   vector_ptr,
-  hpx::naming::id_type
+  hpx::naming::id_type,
+  lua_aux_client
   > variant_type;
 
 struct table_iter_type {
@@ -137,7 +157,7 @@ private:
       ar & var;
     }
 public:
-  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t, locality_t };
+  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t, locality_t, client_t };
 
   variant_type var;
 

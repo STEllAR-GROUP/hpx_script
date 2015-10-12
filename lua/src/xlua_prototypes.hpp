@@ -44,6 +44,7 @@ int open_future(lua_State *L);
 int open_guard(lua_State *L);
 int open_locality(lua_State *L);
 int new_locality(lua_State *L);
+int new_component(lua_State *L);
 
 int new_future(lua_State *L);
 int new_table(lua_State *L);
