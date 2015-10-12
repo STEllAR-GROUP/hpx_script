@@ -118,6 +118,7 @@ int table_len(lua_State *L) {
       table_ptr *fnc_p = (table_ptr *)lua_touserdata(L,-1);
       table_ptr& fnc = *fnc_p;
       int sz = fnc->size;
+      //if(sz == 0) sz = fnc->t.size();
       lua_pushnumber(L,sz);
     }
     return 1;

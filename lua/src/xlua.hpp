@@ -60,7 +60,7 @@ private:
       ar & data;
     }
 };
- 
+
 class Holder;
 
 typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
@@ -68,7 +68,6 @@ typedef hpx::shared_future<ptr_type> future_type;
 typedef boost::variant<double,std::string> key_type;
 typedef std::map<key_type,Holder> table_type;
 typedef boost::shared_ptr<std::vector<double> > vector_ptr;
-//typedef boost::shared_ptr<std::map<key_type,Holder> > table_ptr;
 struct table_inner {
   table_inner() {}
   table_inner(const table_type* t_) : t(*t_) {}

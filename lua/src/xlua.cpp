@@ -62,6 +62,8 @@ const char *lua_client_metatable_name = "lua_client";
 
 const char *hpx_metatable_name = "hpx";
 
+table_ptr globals{new table_inner};
+
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
 bool cmp_meta(lua_State *L,int index,const char *meta_name);
@@ -134,6 +136,12 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     luaL_requiref(L, "locality",&open_locality, 1);
     luaL_requiref(L, "component",&open_component, 1);
     lua_pop(L,lua_gettop(L));
+
+    new_table(L);
+    table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
+    *tp = globals;
+    lua_setglobal(L,"globals");
+
     for(auto i=function_registry.begin();i != function_registry.end();++i) {
       // Insert into table
       if(lua_load(L,(lua_Reader)lua_read,(void *)&i->second,i->first.c_str(),"b") != 0) {
@@ -247,7 +255,7 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       } else if(s == locality_metatable_name) {
         var = *(hpx::naming::id_type *)lua_touserdata(L,index);
       } else {
-        std::cerr << "Can't pack key value!" << lua_type(L,-1) << std::endl;
+        std::cerr << "Can't pack key value!" << lua_type(L,-1) << " s=" << s << std::endl;
         abort();
       }
     } else if(lua_istable(L,index)) {
@@ -616,7 +624,7 @@ int hpx_future_get(lua_State *L) {
       lua_pushnil(L);
     }
   }
-  return 1;
+  return lua_gettop(L);
 }
 
 ptr_type luax_async2(

@@ -58,7 +58,7 @@ t = {i=5,s='str',a=function() return 6 end,t={i2=6}}
 tf = make_ready_future(t)
 t2 = tf:Get()
 if #t ~= #t2 then
-  print("table lengths are incorrect")
+  print("table lengths are incorrect",#t,#t2)
 end
 for k,v in pairs(t) do
   if type(v) == "table" then
@@ -113,9 +113,48 @@ c:Set("x",1)
 if c:Get("x"):Get() ~= 1 then
   print("Components don't work")
 end
+c:Set("getx",function(self) return self.x end)
+cv = c:Call("getx"):Get()
+if 1 ~= cv then
+  print("Component call 1 fail",cv)
+end
+cv = c:Call(function(self) return 2*self.x end):Get()
+if 2 ~= cv then
+  print("Component call 2 fail",cv)
+end
 c:Set("loc",find_here())
 if ""..c:Get("loc"):Get() ~= ""..find_here() then
-  print("Component locality check failed")
+  print("Component key locality check failed")
 end
+
+function two_values()
+  return 1,2
+end
+f = async(two_values)
+a,b = f:Get()
+if a ~= 1 or b ~= 2 then
+  print('two value future return fail')
+end
+
+function two(a)
+  t = a:Get()
+  if t[1]:Get() ~= 3 or t[2]:Get() ~= 4 then
+    print('when_all failed')
+  end
+end
+
+HPX_PLAIN_ACTION('two')
+
+-- test when_all
+f1 = make_ready_future(3)
+f2 = make_ready_future(4)
+
+-- Use two args
+f3 = when_all(f1,f2)
+f3:Then('two'):Get()
+
+-- Use a table
+f3 = when_all({f1,f2})
+f3:Then('two'):Get()
 
 print("No other output than this message means test succeeded")
