@@ -93,7 +93,7 @@ struct lua_aux_client {
 
   hpx::future<ptr_type> call(std::string name,ptr_type ptargs);
 
-  hpx::future<void> set(std::string name,Holder h);
+  hpx::future<ptr_type> set(std::string name,Holder h);
 private:
   friend class hpx::serialization::access;
   template<class Archive>

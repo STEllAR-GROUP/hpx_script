@@ -24,8 +24,10 @@ struct lua_component
 
   HPX_DEFINE_COMPONENT_DIRECT_ACTION(lua_component,get);
 
-  void set(std::string name,Holder h) {
+  ptr_type set(std::string name,Holder h) {
+    ptr_type pt{new std::vector<Holder>()};
     (tp->t)[name] = h;
+    return pt;
   }
 
   HPX_DEFINE_COMPONENT_DIRECT_ACTION(lua_component,set);
@@ -63,7 +65,7 @@ struct lua_client
     return hpx::async(act, get_id(), name, ptargs);
   }
 
-  hpx::future<void> set(std::string name,Holder h) {
+  hpx::future<ptr_type> set(std::string name,Holder h) {
     lua_component::set_action act;
     return hpx::async(act, get_id(), name, h);
   }
@@ -110,7 +112,7 @@ hpx::future<ptr_type> lua_aux_client::call(std::string name,ptr_type ptargs)
   return hpx::async(act, id, name, ptargs);
 }
 
-hpx::future<void> lua_aux_client::set(std::string name,Holder h) {
+hpx::future<ptr_type> lua_aux_client::set(std::string name,Holder h) {
   lua_component::set_action act;
   return hpx::async(act, id, name, h);
 }
@@ -179,7 +181,7 @@ int create_component(lua_State *L) {
 int hpx_component_clean(lua_State *L) {
     if(cmp_meta(L,-1,lua_client_metatable_name)) {
       lua_aux_client *fnc = (lua_aux_client *)lua_touserdata(L,-1);
-      dtor(fnc);
+      //dtor(fnc);
     }
     return 0;
 }
@@ -244,7 +246,13 @@ int lua_client_set(lua_State *L) {
       std::string key = lua_tostring(L,-2);
       Holder h;
       h.pack(L,-1);
-      lcp->set(key,h);
+      future_type ff = lcp->set(key,h);
+      lua_pop(L,lua_gettop(L));
+      new_future(L);
+      future_type *fc =
+        (future_type *)lua_touserdata(L,-1);
+      *fc = ff;
+      return 1;
     }
     return 0;
 }
