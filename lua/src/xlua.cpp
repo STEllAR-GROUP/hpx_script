@@ -11,6 +11,7 @@ const int max_output_args = 10;
   }
 
 namespace hpx {
+std::string env = "_ENV";
 
 void show(std::ostream& o,ptr_type p);
 
@@ -634,7 +635,7 @@ int hpx_future_get(lua_State *L) {
 }
 
 ptr_type luax_async2(
-    string_ptr func,
+    closure_ptr cl,
     ptr_type args);
 
 int luax_wait_all(lua_State *L) {
@@ -798,25 +799,40 @@ int luax_when_any(lua_State *L) {
 
 const char *unwrapped_str = "**unwrapped**";
 
-std::string getfunc(lua_State *L,int index) {
-  std::string func;
+closure_ptr getfunc(lua_State *L,int index) {
+  closure_ptr cl{new Closure};
   if(lua_isstring(L,index)) {
-    func = lua_tostring(L,index);
+    cl->code.data = lua_tostring(L,index);
   } else if(lua_isfunction(L,index)) {
     lua_pushvalue(L,index);
+    int n = lua_gettop(L);
+    for(int i=1;true;i++) {
+      const char *name = lua_getupvalue(L,n,i);
+      if(name == 0) break;
+      ClosureVar cv;
+      cv.name = name;
+      if(env != name) {
+        cv.val.pack(L,-1);
+      } else {
+        cv.val.var = Empty();
+      }
+      cl->vars.push_back(cv);
+    }
+    int n2 = lua_gettop(L);
+    if(n2 > n) lua_pop(L,n2-n);
     assert(lua_isfunction(L,-1));
-    lua_dump(L,(lua_Writer)lua_write,&func);
+    lua_dump(L,(lua_Writer)lua_write,&cl->code.data);
     lua_pop(L,1);
   } else if(lua_istable(L,index)) {
     // this is intended to be used with unwrapped
-    func = unwrapped_str;
+    cl->code.data = unwrapped_str;
   } else {
     STACK;
-    func = "**error**";
+    cl->code.data = "**error**";
     std::cout << "Getfunc error" << std::endl;
     abort();
   }
-  return func;
+  return cl;
 }
 
 int hpx_future_then(lua_State *L) {
@@ -828,7 +844,8 @@ int hpx_future_then(lua_State *L) {
     // Package up the arguments
     ptr_type args(new std::vector<Holder>());
     string_ptr fname{new std::string};
-    *fname = getfunc(L,2);
+    closure_ptr cl = getfunc(L,2);
+    *fname = cl->code.data;
     if(*fname == unwrapped_str) {
       Holder h;
       h.pack(L,1);
@@ -848,7 +865,7 @@ int hpx_future_then(lua_State *L) {
     new_future(L);
     future_type *fc =
       (future_type *)lua_touserdata(L,-1);
-    *fc = fnc->then(boost::bind(luax_async2,fname,args));
+    *fc = fnc->then(boost::bind(luax_async2,cl,args));
   }
   return 1;
 }
@@ -1230,6 +1247,17 @@ bool loadFunc(lua_State *L) {
       return true;
     }
     */
+    // TODO FIX
+    #if 0
+    auto search = globals->t.find(func);
+    if(search != globals->t.end() && search->second.var.which() == Holder::bytecode_t) {
+      Bytecode bytecode = boost::get<Bytecode>(search->second.var);
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode.data,0,"b") != 0) {
+        lua_pop(L,1);
+        return true;
+      }
+    }
+    #endif
     lua_getglobal(L,func);
     if(lua_isfunction(L,-1)) {
       lua_insert(L,1);
@@ -1336,10 +1364,21 @@ ptr_type luax_dataflow2(
       if(lua_isfunction(L,-1)) {
         found = true;
       }
+      #if 0
+      if(!found) {
+        auto search = globals->t.find(*fname);
+        if(search != globals->t.end() && search->second.var.which() == Holder::bytecode_t) {
+          Bytecode bytecode = boost::get<Bytecode>(search->second.var);
+          if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode.data,0,"b") != 0) {
+            found = true;
+          }
+        }
+      }
+      #endif
 
       if(!found) {
         if(function_registry.find(*fname) == function_registry.end()) {
-          std::cout << "Function '" << *fname << "' is not defined." << std::endl;
+          std::cout << "Function '" << *fname << "' is not defined(3)." << std::endl;
           return answers;
         }
 
@@ -1398,7 +1437,7 @@ ptr_type luax_dataflow2(
 
 //--- Handle async calling from Lua
 ptr_type luax_async2(
-    string_ptr fname,
+    closure_ptr cl,
     ptr_type args) {
   ptr_type answers(new std::vector<Holder>());
 
@@ -1411,34 +1450,66 @@ ptr_type luax_async2(
 
     lua_pop(L,lua_gettop(L));
 
-    if(is_bytecode(*fname)) {
-      if(lua_load(L,(lua_Reader)lua_read,(void *)fname.get(),0,"b") != 0) {
-        std::cout << "Error in function: size=" << fname->size() << std::endl;
+    if(is_bytecode(cl->code.data)) {
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&cl->code.data,0,"b") != 0) {
+        std::cout << "Error in function: size=" << cl->code.data.size() << std::endl;
         SHOW_ERROR(L);
+      } else {
+        int findex = lua_gettop(L);
+        if(cl->vars.size() > 0) {
+          // Passing a closure
+          const int sz = cl->vars.size();
+          for(int n=0; n < sz;++n) {
+            ClosureVar& cv = cl->vars[n];
+            if(cv.name == "_ENV") {
+              lua_getglobal(L,"_G");
+            } else {
+              cv.val.unpack(L);
+            }
+            lua_setupvalue(L,findex,n+1);
+            cl->vars.push_back(cv);
+          }
+          lua_pop(L,lua_gettop(L)-findex);
+        }
       }
     } else {
-      lua_getglobal(L,fname->c_str());
+      lua_getglobal(L,cl->code.data.c_str());
       if(lua_isfunction(L,-1)) {
         found = true;
       } else {
         lua_pop(L,1);
       }
+      if(!found) {
+        std::string skey = cl->code.data + "{s}";
+        auto search = globals->t.find(cl->code.data);
+        if(search != globals->t.end()) {
+          if(search->second.var.which() == Holder::bytecode_t) {
+            Bytecode bytecode = boost::get<Bytecode>(search->second.var);
+            int rc = lua_load(L,(lua_Reader)lua_read,(void *)&bytecode.data,0,"b");
+            if(rc == LUA_OK) {
+              found = true;
+            } else {
+              SHOW_ERROR(L);
+            }
+          }
+        }
+      }
 
       if(!found) {
-        if(function_registry.find(*fname) == function_registry.end()) {
-          std::cout << "Function '" << *fname << "' is not defined." << std::endl;
+        if(function_registry.find(cl->code.data) == function_registry.end()) {
+          std::cout << "Function '" << cl->code.data << "' is not defined." << std::endl;
           return answers;
         }
 
-        std::string bytecode = function_registry[*fname];
-        if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,fname->c_str(),"b") != 0) {
-          std::cout << "Error in function: '" << *fname << "' size=" << bytecode.size() << std::endl;
+        std::string bytecode = function_registry[cl->code.data];
+        if(lua_load(L,(lua_Reader)lua_read,(void *)&bytecode,cl->code.data.c_str(),"b") != 0) {
+          std::cout << "Error in function: '" << cl->code.data << "' size=" << bytecode.size() << std::endl;
           SHOW_ERROR(L);
           return answers;
         }
 
-        lua_setglobal(L,fname->c_str());
-        lua_getglobal(L,fname->c_str());
+        lua_setglobal(L,cl->code.data.c_str());
+        lua_getglobal(L,cl->code.data.c_str());
       }
     }
 
@@ -1592,7 +1663,8 @@ int dataflow(lua_State *L) {
     }
     
     string_ptr fname(new std::string);
-    *fname = getfunc(L,1);
+    closure_ptr cl = getfunc(L,1);
+    *fname = cl->code.data;
     if(*fname == unwrapped_str) {
       Holder h;
       h.pack(L,1);
@@ -1626,13 +1698,12 @@ int async(lua_State *L) {
     int nargs = lua_gettop(L);
     
     //CHECK_STRING(1,"async")
-    string_ptr fname{new std::string};
-    *fname = getfunc(L,1);
-    if(*fname == unwrapped_str) {
+    closure_ptr cl = getfunc(L,1);
+    if(cl->code.data == unwrapped_str) {
       Holder h;
       h.pack(L,1);
       h.push(args);
-      *fname = "call";
+      cl->code.data = "call";
     }
     for(int i=2;i<=nargs;i++) {
       Holder h;
@@ -1643,8 +1714,8 @@ int async(lua_State *L) {
     // Launch the thread
     future_type f =
       (loc == nullptr) ?
-        hpx::async(luax_async2,fname,args) :
-        hpx::async<luax_async_action>(*loc,fname,args);
+        hpx::async(luax_async2,cl,args) :
+        hpx::async<luax_async_action>(*loc,cl,args);
 
     new_future(L);
     future_type *fc =
@@ -1768,7 +1839,7 @@ int hpx_run(lua_State *L) {
 int hpx_srun(lua_State *L,std::string& fname,ptr_type gdata) {
   int n = lua_gettop(L);
   if(function_registry.find(fname) == function_registry.end()) {
-    std::cout << "Function '" << fname << "' is not defined." << std::endl;
+    std::cout << "Function '" << fname << "' is not defined(2)." << std::endl;
     return 0;
   }
 

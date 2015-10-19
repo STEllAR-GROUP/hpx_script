@@ -27,6 +27,7 @@
     << lua_tostring(L,-1) << std::endl; lua_pop(L,1); } while(false)
 
 #define HERE std::cout << "HERE: " << __FILE__ << ":" << __LINE__ << std::endl
+#define ASSERT(X) if(!(X)) { std::cout << "Abort: " << #X << std::endl; abort(); }
 
 #define OUT(I,V) do { o << I << "] " << V << std::endl; } while(false)
 #define OUT2(I,V,V2) do { o << I << "] " << V << " " << V2 << std::endl; } while(false)
@@ -60,8 +61,6 @@ private:
       ar & data;
     }
 };
-
-class Holder;
 
 typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
@@ -111,6 +110,20 @@ private:
     {
     }
 };
+class ClosureVar;
+struct Closure {
+  std::vector<ClosureVar> vars;
+  Bytecode code;
+private:
+    friend class hpx::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & vars;
+      ar & code;
+    }
+};
+typedef boost::shared_ptr<Closure> closure_ptr;
 typedef boost::shared_ptr<table_inner> table_ptr;
 typedef boost::variant<
   Empty,
@@ -122,7 +135,8 @@ typedef boost::variant<
   Bytecode,
   vector_ptr,
   hpx::naming::id_type,
-  lua_aux_client
+  lua_aux_client,
+  closure_ptr
   > variant_type;
 
 struct table_iter_type {
@@ -157,7 +171,7 @@ private:
       ar & var;
     }
 public:
-  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t, locality_t, client_t };
+  enum utype { empty_t, num_t, fut_t, str_t, ptr_t, table_t, bytecode_t, vector_t, locality_t, client_t, closure_t };
 
   variant_type var;
 
@@ -180,6 +194,19 @@ public:
       vec->push_back(*this);
   }
   void pack(lua_State *L,int index);
+};
+
+struct ClosureVar {
+  std::string name;
+  Holder val;
+private:
+    friend class hpx::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & name;
+      ar & val;
+    }
 };
 
 class Lua;
