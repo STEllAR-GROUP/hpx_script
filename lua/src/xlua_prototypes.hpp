@@ -49,6 +49,7 @@ int new_component(lua_State *L);
 int new_future(lua_State *L);
 int new_table(lua_State *L);
 int new_vector(lua_State *L);
+int apex_register_policy(lua_State *L);
 
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);

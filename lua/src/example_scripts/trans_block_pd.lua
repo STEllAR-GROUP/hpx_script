@@ -31,6 +31,15 @@ function zero(i,j)
   return 0
 end
 
+function create_matrix_s(self,block_size)
+  mb = table_t.new()
+  for i=1,block_size do
+    mb[i] = vector_t.new()
+    mb[i][block_size] = 0
+  end
+  self.mb = mb
+end
+
 function create_matrix(block_count,block_size)
   local i,ib,jb,m,mb,all,loc
   all = find_all_localities()
@@ -40,12 +49,7 @@ function create_matrix(block_count,block_size)
     for jb=1,block_count do
       loc = all[(ib+jb) % #all + 1]
       sub = component.new(loc)
-      mb = table_t.new()
-      for i=1,block_size do
-        mb[i] = vector_t.new()
-        mb[i][block_size] = 0
-      end
-      sub:Set("mb",mb)
+      sub:Call(create_matrix_s,block_size)
       m[ib][jb] = sub
     end
   end

@@ -121,6 +121,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     lua_setglobal(L,"find_remote_localities");
     lua_pushcfunction(L,root_locality);
     lua_setglobal(L,"find_root_locality");
+    lua_pushcfunction(L,apex_register_policy);
+    lua_setglobal(L,"apex_register_policy");
 
     //open_hpx(L);
     luaL_requiref(L, "hpx",&open_hpx, 1);

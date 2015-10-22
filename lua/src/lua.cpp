@@ -529,6 +529,15 @@ int main (int argc,char **argv) {
 
   hpx::runtime_mode mode = hpx::runtime_mode_default;
 
+  const char *pre_hpx_init = "pre_hpx_init.lua";
+  FILE *fp = fopen(pre_hpx_init,"r");
+  if(fp != 0) {
+    fclose(fp);
+    hpx::LuaEnv lenv;
+    lua_State *L = lenv;
+    dofile(L,pre_hpx_init);
+  }
+
   std::vector<std::string> cfg;
   cfg.push_back("hpx.commandline.allow_unknown=1");
 
