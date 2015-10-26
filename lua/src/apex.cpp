@@ -28,14 +28,14 @@ int apex_register_policy(lua_State *L) {
       INSERT(APEX_START_EVENT)
       INSERT(APEX_STOP_EVENT)
       INSERT(APEX_SAMPLE_VALUE)
+      INSERT(APEX_RESUME_EVENT)
+      INSERT(APEX_YIELD_EVENT)
       } else {
         std::cout << "Unknown apex policy" << std::endl;
         return 0;
       }
     }
   }
-    //std::set<apex_event_type> when = {APEX_STARTUP, APEX_SHUTDOWN, APEX_NEW_NODE,
-        //APEX_NEW_THREAD, APEX_START_EVENT, APEX_STOP_EVENT, APEX_SAMPLE_VALUE};
   apex::register_policy(when, [b](apex_context const& context)->int{
     LuaEnv lenv;
     lua_State *L = lenv;
@@ -50,6 +50,8 @@ int apex_register_policy(lua_State *L) {
       CASE(APEX_START_EVENT)
       CASE(APEX_STOP_EVENT)
       CASE(APEX_SAMPLE_VALUE)
+      CASE(APEX_RESUME_EVENT)
+      CASE(APEX_YIELD_EVENT)
       default:
         std::cout << "Unknown apex event type" << std::endl;
     }
