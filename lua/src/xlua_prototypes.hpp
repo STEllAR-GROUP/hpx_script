@@ -51,6 +51,8 @@ int new_table(lua_State *L);
 int new_vector(lua_State *L);
 int apex_register_policy(lua_State *L);
 
+int vector_pop(lua_State *L);
+
 const char *lua_read(lua_State *L,void *data,size_t *size);
 int lua_write(lua_State *L,const char *str,unsigned long len,std::string *buf);
 bool cmp_meta(lua_State *L,int index,const char *meta_name);

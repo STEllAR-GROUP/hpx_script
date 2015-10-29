@@ -91,6 +91,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     lua_setglobal(L,"call");
     lua_pushcfunction(L,async);
     lua_setglobal(L,"async");
+    lua_pushcfunction(L,vector_pop);
+    lua_setglobal(L,"vector_pop");
     lua_pushcfunction(L,luax_wait_all);
     lua_setglobal(L,"wait_all");
     lua_pushcfunction(L,luax_when_all);
@@ -583,6 +585,16 @@ Lua *get_lua_ptr() {
         lua = new Lua();
     } else {
       h->held = nullptr;
+    }
+    lua_State *L = lua->get_state();
+    for(auto i=function_registry.begin();i != function_registry.end();++i) {
+      // Insert into table
+      if(lua_load(L,(lua_Reader)lua_read,(void *)&i->second,i->first.c_str(),"b") != 0) {
+        std::cout << "function " << i->first << " size=" << i->second.size() << std::endl;
+        SHOW_ERROR(L);
+      } else {
+        lua_setglobal(L,i->first.c_str());
+      }
     }
     return lua;
 }
@@ -1780,10 +1792,11 @@ int hpx_reg(lua_State *L) {
 			const int n = lua_gettop(L);
 			std::string fname = lua_tostring(L,-1);
 			lua_getglobal(L,fname.c_str());
-      std::string bytecode;
-			lua_dump(L,(lua_Writer)lua_write,&bytecode);
-			function_registry[fname]=bytecode;
-			//std::cout << "register(" << fname << "):size=" << len << std::endl;
+      Bytecode bc;
+			lua_dump(L,(lua_Writer)lua_write,&bc.data);
+			function_registry[fname]=bc.data;
+      (globals->t)[fname].var = bc;
+			//std::cout << "register(" << fname << "):size=" << bytecode.size() << std::endl;
 			const int nf = lua_gettop(L);
 			if(nf > n) {
 				lua_pop(L,nf-n);
