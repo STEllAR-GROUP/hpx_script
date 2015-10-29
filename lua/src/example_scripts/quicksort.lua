@@ -55,7 +55,7 @@ end
 mydata=vector_t.new()
 local j=0
 for j=1, 100000 do
-   mydata[j]=math.random(1000)
+   mydata[j]=math.random(10000)
 end
 
 quicks(mydata)
