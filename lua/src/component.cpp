@@ -32,7 +32,7 @@ struct lua_component
 
   HPX_DEFINE_COMPONENT_DIRECT_ACTION(lua_component,set);
 
-  ptr_type call(std::string name,ptr_type ptargs);
+  ptr_type call(closure_ptr cp,ptr_type ptargs);
 
   HPX_DEFINE_COMPONENT_DIRECT_ACTION(lua_component,call);
 };
@@ -59,10 +59,10 @@ struct lua_client
     return hpx::async(act, get_id(), name);
   }
 
-  hpx::future<ptr_type> call(std::string name,ptr_type ptargs)
+  hpx::future<ptr_type> call(closure_ptr cp,ptr_type ptargs)
   {
     lua_component::call_action act;
-    return hpx::async(act, get_id(), name, ptargs);
+    return hpx::async(act, get_id(), cp, ptargs);
   }
 
   hpx::future<ptr_type> set(std::string name,Holder h) {
@@ -71,45 +71,16 @@ struct lua_client
   }
 };
 
-#if 0
-struct lua_aux_client {
-  hpx::naming::id_type id;
-
-  hpx::future<ptr_type> get(std::string name)
-  {
-    lua_component::get_action act;
-    return hpx::async(act, id, name);
-  }
-
-  hpx::future<ptr_type> call(std::string name,ptr_type ptargs)
-  {
-    lua_component::call_action act;
-    return hpx::async(act, id, name, ptargs);
-  }
-
-  hpx::future<void> set(std::string name,Holder h) {
-    lua_component::set_action act;
-    return hpx::async(act, id, name, h);
-  }
-private:
-  friend class hpx::serialization::access;
-  template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-      ar & id;
-    }
-};
-#endif
 hpx::future<ptr_type> lua_aux_client::get(std::string name)
 {
   lua_component::get_action act;
   return hpx::async(act, id, name);
 }
 
-hpx::future<ptr_type> lua_aux_client::call(std::string name,ptr_type ptargs)
+hpx::future<ptr_type> lua_aux_client::call(closure_ptr cp,ptr_type ptargs)
 {
   lua_component::call_action act;
-  return hpx::async(act, id, name, ptargs);
+  return hpx::async(act, id, cp, ptargs);
 }
 
 hpx::future<ptr_type> lua_aux_client::set(std::string name,Holder h) {
@@ -117,25 +88,28 @@ hpx::future<ptr_type> lua_aux_client::set(std::string name,Holder h) {
   return hpx::async(act, id, name, h);
 }
 
-ptr_type lua_component::call(std::string func,ptr_type ptargs) {
+ptr_type lua_component::call(closure_ptr cp,ptr_type ptargs) {
   ptr_type pt{new std::vector<Holder>};
   bool found = false;
-  Bytecode bytecode;
-  if(is_bytecode(func)) {
-    bytecode.data = func;
+  if(is_bytecode(cp->code.data)) {
     found = true;
   } else {
-    Holder hbyte = (tp->t)[func];
+    Holder hbyte = (tp->t)[cp->code.data];
     if(hbyte.var.which() == Holder::bytecode_t) {
-      bytecode = boost::get<Bytecode>(hbyte.var);
+      cp->code = boost::get<Bytecode>(hbyte.var);
       found = true;
+    } else if(hbyte.var.which() == Holder::closure_t) {
+      cp = boost::get<closure_ptr>(hbyte.var);
+      found = true;
+    } else {
+      std::cout << "Which = " << hbyte.var.which() << " code=" << cp->code.data << std::endl;
     }
   }
   if(found) {
     LuaEnv lenv;
     lua_State *L = lenv.get_state();
     lua_pop(L,lua_gettop(L));
-    lua_load(L,(lua_Reader)lua_read,(void *)&bytecode.data,0,"b");
+    lua_load(L,(lua_Reader)lua_read,(void *)&cp->code.data,0,"b");
     new_table(L);
     table_ptr *ntp = (table_ptr *)lua_touserdata(L,-1);
     *ntp = tp;
@@ -215,12 +189,12 @@ int lua_client_getid(lua_State *L) {
 int lua_client_call(lua_State *L) {
     if(cmp_meta(L,1,lua_client_metatable_name)) {
       lua_aux_client *lcp = (lua_aux_client *)lua_touserdata(L,1);
-      std::string func;
+      closure_ptr cp{new Closure()};
       if(lua_isstring(L,2)) {
-        func = lua_tostring(L,2);
+        cp->code.data = lua_tostring(L,2);
       } else if(lua_isfunction(L,2)) {
         lua_pushvalue(L,2);
-        lua_dump(L,(lua_Writer)lua_write,&func);
+        lua_dump(L,(lua_Writer)lua_write,&cp->code.data);
         lua_pop(L,1);
       }
       ptr_type pt{new std::vector<Holder>};
@@ -234,7 +208,7 @@ int lua_client_call(lua_State *L) {
       new_future(L);
       future_type *fc =
         (future_type *)lua_touserdata(L,-1);
-      *fc = lcp->call(func,pt);
+      *fc = lcp->call(cp,pt);
       return 1;
     }
     return 0;

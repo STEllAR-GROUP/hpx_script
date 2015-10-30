@@ -146,6 +146,31 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     table_ptr *tp = (table_ptr *)lua_touserdata(L,-1);
     *tp = globals;
     lua_setglobal(L,"globals");
+    luaL_dostring(L,
+      " function for_each_s(i0,ihi,f)"
+      "  local i"
+      "  for i=i0,ihi do"
+      "    f(i)"
+      "  end"
+      " end"
+      ""
+      " function for_each(lo,hi,f,par)"
+      "  local i0,gr,ihi,fs"
+      "  if par == nil then"
+      "    par = 8"
+      "  end"
+      "  gr = math.floor((hi-lo+1)/par)"
+      "  if gr == 0 then"
+      "    gr = 1"
+      "  end"
+      "  fs = {}"
+      "  for i0=lo,hi,gr do"
+      "    ihi = math.min(hi,i0+gr-1)"
+      "    fs[#fs+1]=async(for_each_s,i0,ihi,f)"
+      "  end"
+      "  wait_all(fs)"
+      " end"
+  );
 
     for(auto i=function_registry.begin();i != function_registry.end();++i) {
       // Insert into table
@@ -233,7 +258,26 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       */
     } else if(var.which() == bytecode_t) {
       Bytecode& bc = boost::get<Bytecode>(var);
-      lua_load(L,(lua_Reader)lua_read,(void *)&bc.data,"func","b");
+      lua_load(L,(lua_Reader)lua_read,(void *)&bc.data,0,"b");
+    } else if(var.which() == closure_t) {
+      closure_ptr cp = boost::get<closure_ptr>(var);
+      lua_load(L,(lua_Reader)lua_read,(void *)&cp->code.data,0,"b");
+      int findex = lua_gettop(L);
+      if(cp->vars.size() > 0) {
+        // Passing a closure
+        const int sz = cp->vars.size();
+        for(int n=0; n < sz;++n) {
+          ClosureVar& cv = cp->vars[n];
+          if(cv.name == "_ENV") {
+            lua_getglobal(L,"_G");
+          } else {
+            cv.val.unpack(L);
+          }
+          lua_setupvalue(L,findex,n+1);
+          cp->vars.push_back(cv);
+        }
+        lua_pop(L,lua_gettop(L)-findex);
+      }
     } else if(var.which() == empty_t) {
       lua_pushnil(L);
     } else {
@@ -322,9 +366,21 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     } else if(lua_isfunction(L,index)) {
       lua_pushvalue(L,index);
       assert(lua_isfunction(L,-1));
-      Bytecode b;
-      lua_dump(L,(lua_Writer)lua_write,&b.data);
-      var = b;
+      closure_ptr cp{new Closure()};
+      lua_dump(L,(lua_Writer)lua_write,&cp->code.data);
+      for(int i=1;true;i++) {
+        const char *name = lua_getupvalue(L,index,i);
+        if(name == 0) break;
+        ClosureVar cv;
+        cv.name = name;
+        if(env != name) {
+          cv.val.pack(L,-1);
+        } else {
+          cv.val.var = Empty();
+        }
+        cp->vars.push_back(cv);
+      }
+      var = cp;
       lua_pop(L,1);
     } else if(lua_isnil(L,index)) {
       Empty e;

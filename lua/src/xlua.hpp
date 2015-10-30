@@ -83,25 +83,6 @@ private:
     }
 };
 
-struct lua_aux_client {
-  hpx::naming::id_type id;
-
-  lua_aux_client() {}
-
-  hpx::future<ptr_type> get(std::string name);
-
-  hpx::future<ptr_type> call(std::string name,ptr_type ptargs);
-
-  hpx::future<ptr_type> set(std::string name,Holder h);
-private:
-  friend class hpx::serialization::access;
-  template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-      ar & id;
-    }
-};
-
 struct Empty {
 private:
     friend class hpx::serialization::access;
@@ -125,6 +106,25 @@ private:
 };
 typedef boost::shared_ptr<Closure> closure_ptr;
 typedef boost::shared_ptr<table_inner> table_ptr;
+
+struct lua_aux_client {
+  hpx::naming::id_type id;
+
+  lua_aux_client() {}
+
+  hpx::future<ptr_type> get(std::string name);
+
+  hpx::future<ptr_type> call(closure_ptr cp,ptr_type ptargs);
+
+  hpx::future<ptr_type> set(std::string name,Holder h);
+private:
+  friend class hpx::serialization::access;
+  template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+      ar & id;
+    }
+};
 typedef boost::variant<
   Empty,
   double,
