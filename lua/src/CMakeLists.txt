@@ -14,15 +14,17 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${HPX_ROOT}/share/cmake-${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}/Modules)
 
+find_package(Readline)
+if(READLINE_FOUND)
+  add_definitions(-DLUA_USE_READLINE)
+endif()
 find_package(HPX)
 if(HPX_FOUND)
   include_directories(${HPX_INCLUDE_DIRS})
   link_directories(${HPX_LIB_DIRS})
 
-  include_directories(${LUA_DIR}/src)
-  link_directories(${LUA_DIR}/src)
-
-  add_definitions(-DLUA_USE_READLINE)
+  include_directories(${LUA_DIR}/include)
+  link_directories(${LUA_DIR}/lib)
 
   include_directories(.)
 
