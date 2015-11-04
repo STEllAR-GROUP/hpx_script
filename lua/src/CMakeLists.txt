@@ -46,7 +46,12 @@ if(HPX_FOUND)
     DEPENDENCIES xlua_lib
     )
 
-  target_link_libraries(xlua_exe lua readline)
+  if(READLINE_FOUND)
+    target_link_libraries(xlua_exe lua readline)
+  else()
+    target_link_libraries(xlua_exe lua)
+  endif()
+
   target_link_libraries(hello_exe lua)
 else()
   message("Could not find HPX.")
