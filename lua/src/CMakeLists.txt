@@ -14,9 +14,12 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${HPX_ROOT}/share/cmake-${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}/Modules)
 
-find_package(Readline)
+#find_package(Readline)
 if(READLINE_FOUND)
   add_definitions(-DLUA_USE_READLINE)
+  set(READLINE_LINK readline)
+else()
+  set(READLINE_LINK )
 endif()
 find_package(HPX)
 if(HPX_FOUND)
@@ -46,7 +49,7 @@ if(HPX_FOUND)
     DEPENDENCIES xlua_lib
     )
 
-  target_link_libraries(xlua_exe lua readline)
+  target_link_libraries(xlua_exe lua ${READLINE_LINK})
   target_link_libraries(hello_exe lua)
 else()
   message("Could not find HPX.")
