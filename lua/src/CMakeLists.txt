@@ -14,9 +14,9 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${HPX_ROOT}/share/cmake-${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}/Modules)
 
-#find_package(Readline)
+find_package(Readline)
 if(READLINE_FOUND)
-  add_definitions(-DLUA_USE_READLINE)
+  add_definitions(-DXLUA_USE_READLINE)
   set(READLINE_LINK readline)
 else()
   set(READLINE_LINK )

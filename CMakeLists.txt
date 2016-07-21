@@ -21,6 +21,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 
 # Instruct cmake to find the HPX settings
 find_package(HPX)
+find_package(Lua)
 if(NOT HPX_FOUND)
   hpx_error("hpx_script" "Could not find HPX library")
 endif()

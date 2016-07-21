@@ -49,7 +49,7 @@ int new_component(lua_State *L);
 int new_future(lua_State *L);
 int new_table(lua_State *L);
 int new_vector(lua_State *L);
-int apex_register_policy(lua_State *L);
+//int apex_register_policy(lua_State *L);
 
 int vector_pop(lua_State *L);
 

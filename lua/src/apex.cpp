@@ -1,3 +1,4 @@
+#if 0
 #include "xlua.hpp"
 #include "xlua_prototypes.hpp"
 #include <hpx/util/apex.hpp>
@@ -64,3 +65,4 @@ int apex_register_policy(lua_State *L) {
 }
 
 }
+#endif

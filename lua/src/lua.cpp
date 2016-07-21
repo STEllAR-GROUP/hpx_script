@@ -19,6 +19,12 @@ extern "C" {
 #include "lualib.h"
 }
 
+#ifndef luai_writestringerror
+#define luai_writestringerror(s,p) \
+        (fprintf(stderr, (s), (p)), fflush(stderr))
+#define luai_writestring(s,l)	fwrite((s), sizeof(char), (l), stdout)
+#define luai_writeline()	(luai_writestring("\n", 1), fflush(stdout))
+#endif
 
 #if !defined(LUA_PROMPT)
 #define LUA_PROMPT		"hpx> "
@@ -67,7 +73,7 @@ extern "C" {
 #include <hpx/hpx_init.hpp>
 #include <xlua.hpp>
 
-#if defined(LUA_USE_READLINE)
+#ifdef XLUA_USE_READLINE
 
 #include <stdio.h>
 #include <readline/readline.h>
@@ -78,8 +84,9 @@ extern "C" {
         if (lua_rawlen(L,idx) > 0)  /* non-empty line? */ \
           add_history(lua_tostring(L, idx));  /* add it to history */
 #define lua_freeline(L,b)	((void)L, free(b))
+#error "NOT HERE"
 
-#elif !defined(lua_readline)
+#else
 
 #define lua_readline(L,b,p) \
         ((void)L, fputs(p, stdout), fflush(stdout),  /* show prompt */ \

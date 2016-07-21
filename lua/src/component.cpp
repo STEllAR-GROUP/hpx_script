@@ -194,7 +194,7 @@ int lua_client_call(lua_State *L) {
         cp->code.data = lua_tostring(L,2);
       } else if(lua_isfunction(L,2)) {
         lua_pushvalue(L,2);
-        lua_dump(L,(lua_Writer)lua_write,&cp->code.data);
+        lua_dump(L,(lua_Writer)lua_write,&cp->code.data,true);
         lua_pop(L,1);
       }
       ptr_type pt{new std::vector<Holder>};

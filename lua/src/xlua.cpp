@@ -10,6 +10,11 @@ const int max_output_args = 10;
     return 0; \
   }
 
+#ifndef luai_writestringerror
+#define luai_writestringerror(s,p) \
+        (fprintf(stderr, (s), (p)), fflush(stderr))
+#endif
+
 namespace hpx {
 std::string env = "_ENV";
 
@@ -123,8 +128,8 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
     lua_setglobal(L,"find_remote_localities");
     lua_pushcfunction(L,root_locality);
     lua_setglobal(L,"find_root_locality");
-    lua_pushcfunction(L,apex_register_policy);
-    lua_setglobal(L,"apex_register_policy");
+//    lua_pushcfunction(L,apex_register_policy);
+//    lua_setglobal(L,"apex_register_policy");
 
     //open_hpx(L);
     luaL_requiref(L, "hpx",&open_hpx, 1);
@@ -366,7 +371,7 @@ bool cmp_meta(lua_State *L,int index,const char *meta_name);
       lua_pushvalue(L,index);
       assert(lua_isfunction(L,-1));
       closure_ptr cp{new Closure()};
-      lua_dump(L,(lua_Writer)lua_write,&cp->code.data);
+      lua_dump(L,(lua_Writer)lua_write,&cp->code.data,true);
       for(int i=1;true;i++) {
         const char *name = lua_getupvalue(L,index,i);
         if(name == 0) break;
@@ -555,7 +560,7 @@ std::ostream& show_stack(std::ostream& o,lua_State *L,const char *fname,int line
         else if(lua_isfunction(L,i)) {
           lua_pushvalue(L,i);
           std::string bytecode;
-			    lua_dump(L,(lua_Writer)lua_write,&bytecode);
+			    lua_dump(L,(lua_Writer)lua_write,&bytecode,true);
           lua_pop(L,1);
           std::ostringstream msg;
           msg << "function ";
@@ -721,7 +726,7 @@ int luax_wait_all(lua_State *L) {
         n++;
         const int ix = -2;
         if(!cmp_meta(L,ix,future_metatable_name)) {
-          luai_writestringerror("Argument %d to wait_all() is not a future ",n);
+          luai_writestringerror("Argument %d to wait_all is not a future ",n);
           return 0;
         }
         future_type *fnc = (future_type *)lua_touserdata(L,ix);
@@ -890,7 +895,7 @@ closure_ptr getfunc(lua_State *L,int index) {
     int n2 = lua_gettop(L);
     if(n2 > n) lua_pop(L,n2-n);
     assert(lua_isfunction(L,-1));
-    lua_dump(L,(lua_Writer)lua_write,&cl->code.data);
+    lua_dump(L,(lua_Writer)lua_write,&cl->code.data,true);
     lua_pop(L,1);
   } else if(lua_istable(L,index)) {
     // this is intended to be used with unwrapped
@@ -1219,8 +1224,8 @@ hpx::future<std::vector<Future> > my_when_all(
 }
 
 //--- Use these methods to process function inputs
-boost::shared_ptr<std::vector<ptr_type> > realize_when_all_inputs_step2(ptr_type args,std::vector<future_type> results) {
-  boost::shared_ptr<std::vector<ptr_type> > results_step2(new std::vector<ptr_type>());
+std::shared_ptr<std::vector<ptr_type> > realize_when_all_inputs_step2(ptr_type args,std::vector<future_type> results) {
+  std::shared_ptr<std::vector<ptr_type> > results_step2(new std::vector<ptr_type>());
   for(auto i=results.begin();i != results.end();++i) {
     results_step2->push_back(i->get());
   }
@@ -1241,7 +1246,7 @@ boost::shared_ptr<std::vector<ptr_type> > realize_when_all_inputs_step2(ptr_type
   return results_step2;
 }
 
-hpx::future<boost::shared_ptr<std::vector<ptr_type> > > realize_when_all_inputs(ptr_type args) {
+hpx::future<std::shared_ptr<std::vector<ptr_type> > > realize_when_all_inputs(ptr_type args) {
   std::vector<future_type> futs;
   for(auto i=args->begin();i != args->end();++i) {
     int w = i->var.which();
@@ -1411,7 +1416,7 @@ int call(lua_State *L) {
 ptr_type luax_dataflow2(
     string_ptr fname,
     ptr_type args,
-    boost::shared_ptr<std::vector<ptr_type> > futs) {
+    std::shared_ptr<std::vector<ptr_type> > futs) {
   ptr_type answers(new std::vector<Holder>());
 
   {
@@ -1617,7 +1622,7 @@ future_type luax_dataflow(
     string_ptr fname,
     ptr_type args) {
     // wait for all futures in input
-    hpx::future<boost::shared_ptr<std::vector<ptr_type> > > f1 = realize_when_all_inputs(args);
+    hpx::future<std::shared_ptr<std::vector<ptr_type> > > f1 = realize_when_all_inputs(args);
     // pass values of all futures along with args
     future_type f2 = f1.then(hpx::util::unwrapped(boost::bind(luax_dataflow2,fname,args,_1)));
     // clean all futures out of returns
@@ -1646,7 +1651,7 @@ int luax_run_guarded(lua_State *L) {
   } else if(n == 2) {
     g = *(guard_type *)lua_touserdata(L,-2);
   } else if(n > 2) {
-    boost::shared_ptr<hpx::lcos::local::guard_set> gs{new hpx::lcos::local::guard_set()};
+    std::shared_ptr<hpx::lcos::local::guard_set> gs{new hpx::lcos::local::guard_set()};
     ptr_type all_data{new std::vector<Holder>()};
 
     guard_type *gv = new guard_type[n];
@@ -1848,7 +1853,7 @@ int hpx_reg(lua_State *L) {
 			std::string fname = lua_tostring(L,-1);
 			lua_getglobal(L,fname.c_str());
       Bytecode bc;
-			lua_dump(L,(lua_Writer)lua_write,&bc.data);
+			lua_dump(L,(lua_Writer)lua_write,&bc.data,true);
 			function_registry[fname]=bc.data;
       (globals->t)[fname].var = bc;
 			//std::cout << "register(" << fname << "):size=" << bytecode.size() << std::endl;

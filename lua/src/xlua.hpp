@@ -62,11 +62,11 @@ private:
     }
 };
 
-typedef boost::shared_ptr<std::vector<Holder> > ptr_type;
+typedef std::shared_ptr<std::vector<Holder> > ptr_type;
 typedef hpx::shared_future<ptr_type> future_type;
 typedef boost::variant<double,std::string> key_type;
 typedef std::map<key_type,Holder> table_type;
-typedef boost::shared_ptr<std::vector<double> > vector_ptr;
+typedef std::shared_ptr<std::vector<double> > vector_ptr;
 struct table_inner {
   table_inner() {}
   table_inner(const table_type* t_) : t(*t_) {}
@@ -104,8 +104,8 @@ private:
       ar & code;
     }
 };
-typedef boost::shared_ptr<Closure> closure_ptr;
-typedef boost::shared_ptr<table_inner> table_ptr;
+typedef std::shared_ptr<Closure> closure_ptr;
+typedef std::shared_ptr<table_inner> table_ptr;
 
 struct lua_aux_client {
   hpx::naming::id_type id;
@@ -147,14 +147,14 @@ struct table_iter_type {
 typedef std::vector<Holder> array_type;
 
 struct Guard {
-  boost::shared_ptr<hpx::lcos::local::guard> g;
+  std::shared_ptr<hpx::lcos::local::guard> g;
   ptr_type g_data;
   Guard() : g(new hpx::lcos::local::guard()), g_data(new std::vector<Holder>()) {}
   ~Guard() {}
 };
-typedef boost::shared_ptr<Guard> guard_type;
+typedef std::shared_ptr<Guard> guard_type;
 
-typedef boost::shared_ptr<std::string> string_ptr;
+typedef std::shared_ptr<std::string> string_ptr;
 
 int hpx_srun(lua_State *L,std::string& fname,ptr_type p);
 void hpx_srun(string_ptr fname,ptr_type p,guard_type*,int);
